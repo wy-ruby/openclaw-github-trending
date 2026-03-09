@@ -252,9 +252,7 @@ describe('EmailChannel', () => {
         }
       };
 
-      const channel = new EmailChannel(config);
-
-      await channel.send([], []);
+      await EmailChannel.send(config, [], []);
 
       expect(nodemailer.createTransport).toHaveBeenCalledWith({
         host: 'smtp.example.com',
@@ -268,9 +266,7 @@ describe('EmailChannel', () => {
     });
 
     it('should send email with correct from address', async () => {
-      const channel = new EmailChannel(mockEmailConfig);
-
-      await channel.send([], []);
+      await EmailChannel.send(mockEmailConfig, [], []);
 
       expect(mockTransport.sendMail).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -280,9 +276,7 @@ describe('EmailChannel', () => {
     });
 
     it('should send email to correct recipient', async () => {
-      const channel = new EmailChannel(mockEmailConfig);
-
-      await channel.send([], []);
+      await EmailChannel.send(mockEmailConfig, [], []);
 
       expect(mockTransport.sendMail).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -292,9 +286,7 @@ describe('EmailChannel', () => {
     });
 
     it('should send email with correct subject', async () => {
-      const channel = new EmailChannel(mockEmailConfig);
-
-      await channel.send([], []);
+      await EmailChannel.send(mockEmailConfig, [], []);
 
       expect(mockTransport.sendMail).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -304,9 +296,7 @@ describe('EmailChannel', () => {
     });
 
     it('should send HTML content in email', async () => {
-      const channel = new EmailChannel(mockEmailConfig);
-
-      await channel.send([{ name: 'repo', full_name: 'org/repo', url: 'https://github.com/org/repo', stars: 100, description: 'Desc', language: 'JS' }], []);
+      await EmailChannel.send(mockEmailConfig, [{ name: 'repo', full_name: 'org/repo', url: 'https://github.com/org/repo', stars: 100, description: 'Desc', language: 'JS' }], []);
 
       expect(mockTransport.sendMail).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -318,9 +308,7 @@ describe('EmailChannel', () => {
     it('should return success when email is sent successfully', async () => {
       mockTransport.sendMail.mockResolvedValue({ messageId: '123' });
 
-      const channel = new EmailChannel(mockEmailConfig);
-
-      const result = await channel.send([], []);
+      const result = await EmailChannel.send(mockEmailConfig, [], []);
 
       expect(result.success).toBe(true);
       expect(result.messageId).toBe('123');
@@ -329,9 +317,7 @@ describe('EmailChannel', () => {
     it('should return error when email sending fails', async () => {
       mockTransport.sendMail.mockRejectedValue(new Error('SMTP Error'));
 
-      const channel = new EmailChannel(mockEmailConfig);
-
-      const result = await channel.send([], []);
+      const result = await EmailChannel.send(mockEmailConfig, [], []);
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('SMTP Error');
@@ -342,9 +328,7 @@ describe('EmailChannel', () => {
         throw new Error('Invalid config');
       });
 
-      const channel = new EmailChannel(mockEmailConfig);
-
-      const result = await channel.send([], []);
+      const result = await EmailChannel.send(mockEmailConfig, [], []);
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('Invalid config');
@@ -392,8 +376,7 @@ describe('EmailChannel', () => {
 
       mockTransport.sendMail.mockResolvedValue({ messageId: 'test123' });
 
-      const channel = new EmailChannel(config);
-      const result = await channel.send(newRepos, seenRepos);
+      const result = await EmailChannel.send(config, newRepos, seenRepos);
 
       expect(result.success).toBe(true);
       expect(mockTransport.sendMail).toHaveBeenCalled();
@@ -411,8 +394,7 @@ describe('EmailChannel', () => {
 
       mockTransport.sendMail.mockResolvedValue({ messageId: 'large123' });
 
-      const channel = new EmailChannel(mockEmailConfig);
-      const result = await channel.send(newRepos, []);
+      const result = await EmailChannel.send(mockEmailConfig, newRepos, []);
 
       expect(result.success).toBe(true);
     });

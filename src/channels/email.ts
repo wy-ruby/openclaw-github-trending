@@ -320,23 +320,25 @@ export class EmailChannel {
 
   /**
    * Send email with repositories
+   * @param config Email configuration
    * @param newRepositories Array of new repositories
    * @param seenRepositories Array of seen repositories
    * @returns Push result
    */
-  async send(
+  static async send(
+    config: EmailConfig,
     newRepositories: RepositoryInfo[],
     seenRepositories: RepositoryInfo[]
   ): Promise<PushResult> {
     try {
       // Create transport with SMTP configuration
       const transport: Transporter = nodemailer.createTransport({
-        host: this.config.smtp.host,
-        port: this.config.smtp.port,
-        secure: this.config.smtp.secure,
+        host: config.smtp.host,
+        port: config.smtp.port,
+        secure: config.smtp.secure,
         auth: {
-          user: this.config.smtp.auth.user,
-          pass: this.config.smtp.auth.pass
+          user: config.smtp.auth.user,
+          pass: config.smtp.auth.pass
         }
       });
 
@@ -345,9 +347,9 @@ export class EmailChannel {
 
       // Send email
       const info = await transport.sendMail({
-        from: this.config.from,
-        to: this.config.to,
-        subject: this.config.subject,
+        from: config.from,
+        to: config.to,
+        subject: config.subject,
         html: html
       });
 
