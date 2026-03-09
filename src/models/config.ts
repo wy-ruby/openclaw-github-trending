@@ -65,3 +65,23 @@ export interface GitHubTrendingResult {
   timestamp: string;
   message: string;
 }
+
+/**
+ * History project interface
+ */
+export interface HistoryProject {
+  full_name: string;
+  url: string;
+  stars: number;
+  ai_summary: string;
+  first_seen: string;
+}
+
+/**
+ * History data interface
+ */
+export interface HistoryData {
+  projects: {
+    [full_name: string]: HistoryProject;
+  };
+}

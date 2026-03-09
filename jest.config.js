@@ -7,8 +7,7 @@ module.exports = {
     'src/**/*.ts',
     '!src/**/*.d.ts'
   ],
-  moduleNameMapper: {
-    '^axios$': require.resolve('axios'),
-    '^marked$': '<rootDir>/node_modules/marked/marked.cjs.js'
+ moduleNameMapper: {
+    '^marked$': '<rootDir>/__mocks__/marked.ts'
   }
 };
