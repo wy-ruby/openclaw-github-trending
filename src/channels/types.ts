@@ -58,6 +58,7 @@ export interface PushResult {
   success: boolean;
   code?: number;
   msg?: string;
+  messageId?: string;
   error?: string;
 }
 

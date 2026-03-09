@@ -8,6 +8,7 @@ module.exports = {
     '!src/**/*.d.ts'
   ],
   moduleNameMapper: {
-    '^axios$': require.resolve('axios')
+    '^axios$': require.resolve('axios'),
+    '^marked$': '<rootDir>/node_modules/marked/marked.cjs.js'
   }
 };
