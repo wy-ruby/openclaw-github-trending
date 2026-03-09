@@ -14,6 +14,10 @@ export interface RepositoryInfo {
   stars: number;
   /** Repository description */
   description: string;
+  /** Primary programming language */
+  language?: string;
+  /** Number of forks */
+  forks?: number;
   /** README content (optional) */
   readme_content?: string;
   /** AI-generated summary in Chinese (optional) */
