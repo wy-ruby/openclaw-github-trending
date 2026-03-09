@@ -1,7 +1,7 @@
 {
   "name": "openclaw-plugin-github-trending",
   "version": "1.0.0",
-  "description": "",
+  "description": "OpenClaw plugin for fetching GitHub trending repositories and pushing to Feishu/Email",
   "main": "index.js",
   "scripts": {
     "build": "tsc",
@@ -10,8 +10,8 @@
     "test:coverage": "jest --coverage"
   },
   "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "author": "Your Name",
+  "license": "MIT",
   "type": "commonjs",
   "dependencies": {
     "axios": "^1.13.6",
