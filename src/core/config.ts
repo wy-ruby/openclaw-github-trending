@@ -52,7 +52,13 @@ export class ConfigManager {
   static detectEmailConfig(email: string, password: string): EmailConfig {
     const domain = email.split('@')[1];
 
-    const presets: { [key: string]: any } = {
+    interface EmailPreset {
+      smtp_host: string;
+      smtp_port: number;
+      use_tls: boolean;
+    }
+
+    const presets: { [key: string]: EmailPreset } = {
       'qq.com': {
         smtp_host: 'smtp.qq.com',
         smtp_port: 587,
