@@ -33,13 +33,11 @@ export interface FeishuCardElement {
  * Feishu card header interface
  */
 export interface FeishuCardHeader {
-  title?: {
-    tag?: string;
-    content?: string;
-   VELEM?: any;
+  title: {
+    tag: string;
+    content: string;
   };
   template?: string;
-  LVelem?: any;
 }
 
 /**

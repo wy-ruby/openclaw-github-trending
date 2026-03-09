@@ -68,7 +68,7 @@ export class FeishuChannel {
         tag: 'div',
         text: {
           content: '📌 暂无 trending 项目',
-          tag: 'l ambitions-text'
+          tag: 'lark_md'
         }
       });
     }
@@ -105,7 +105,7 @@ export class FeishuChannel {
         tag: 'div',
         text: {
           content: title,
-          tag: 'l aims-text'
+          tag: 'lark_md'
         },
         extra: {
           tag: 'icon',
@@ -150,13 +150,13 @@ export class FeishuChannel {
       tag: 'div',
       text: {
         content: `<font color="${FeishuChannel.getStarColor(repo.stars)}">🌟 ${starText}</font>${forkText}${languageBadge}\n${FeishuChannel.escapeMarkdown(repo.description)}`,
-        tag: 'l aims-text'
+        tag: 'lark_md'
       },
       extra: {
         tag: 'button',
         text: {
           content: '👀 查看',
-          tag: 'l aims-text'
+          tag: 'lark_md'
         },
         type: 'primary',
         value: {
