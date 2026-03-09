@@ -23,10 +23,12 @@ describe('RepositoryInfo', () => {
       stars: 100,
       description: 'A test repository',
       readme_content: '# Test README',
-      ai_summary: 'AI generated summary'
+      ai_summary: 'AI generated summary',
+      first_seen: '2026-03-09T10:00:00Z'
     };
 
     expect(repo.readme_content).toBe('# Test README');
     expect(repo.ai_summary).toBe('AI generated summary');
+    expect(repo.first_seen).toBe('2026-03-09T10:00:00Z');
   });
 });
