@@ -6,11 +6,9 @@ import axios from 'axios';
 jest.mock('axios');
 
 describe('FeishuChannel', () => {
-  let channel: FeishuChannel;
   const mockWebhookUrl = 'https://open.feishu.cn/open-apis/bot/v2/hook/test-webhook';
 
   beforeEach(() => {
-    channel = new FeishuChannel(mockWebhookUrl);
     jest.clearAllMocks();
   });
 
@@ -28,7 +26,7 @@ describe('FeishuChannel', () => {
         }
       ];
 
-      const card = channel['buildCard'](repositories, []);
+      const card = FeishuChannel.buildCard(repositories, []);
 
       // Verify card structure
       expect(card.config).toHaveProperty('wide_screen_mode', true);
@@ -43,7 +41,7 @@ describe('FeishuChannel', () => {
 
     it('should include correct title with date', () => {
       const repositories: RepositoryInfo[] = [];
-      const card = channel['buildCard'](repositories, []);
+      const card = FeishuChannel.buildCard(repositories, []);
 
       const title = card.header?.title;
       expect(title).toBeDefined();
@@ -73,14 +71,14 @@ describe('FeishuChannel', () => {
         }
       ];
 
-      const card = channel['buildCard'](newRepos, seenRepos);
+      const card = FeishuChannel.buildCard(newRepos, seenRepos);
 
       // Verify both sections exist
       expect(card.elements?.length).toBeGreaterThan(0);
     });
 
     it('should handle empty repository list', () => {
-      const card = channel['buildCard']([], []);
+      const card = FeishuChannel.buildCard([], []);
 
       expect(card.elements?.length).toBeGreaterThan(0);
       // Should still have a header
@@ -99,7 +97,7 @@ describe('FeishuChannel', () => {
         }
       ];
 
-      const card = channel['buildCard'](repositories, []);
+      const card = FeishuChannel.buildCard(repositories, []);
       const cardContent = JSON.stringify(card);
 
       // Should contain 1.5k for 1500 stars
@@ -118,7 +116,7 @@ describe('FeishuChannel', () => {
         }
       ];
 
-      const card = channel['buildCard'](repositories, []);
+      const card = FeishuChannel.buildCard(repositories, []);
       const cardContent = JSON.stringify(card);
 
       expect(cardContent).toContain('This is a detailed description');
@@ -136,7 +134,7 @@ describe('FeishuChannel', () => {
         }
       ];
 
-      const card = channel['buildCard'](repositories, []);
+      const card = FeishuChannel.buildCard(repositories, []);
       const cardContent = JSON.stringify(card);
 
       expect(cardContent).toContain('Java');
@@ -155,7 +153,7 @@ describe('FeishuChannel', () => {
         }
       ];
 
-      const card = channel['buildCard'](repositories, []);
+      const card = FeishuChannel.buildCard(repositories, []);
       const cardContent = JSON.stringify(card);
 
       expect(cardContent).toContain('2.5k');
@@ -170,7 +168,7 @@ describe('FeishuChannel', () => {
         data: { code: 0, msg: 'success' }
       });
 
-      await channel.push(repositories, []);
+      await FeishuChannel.push(mockWebhookUrl, repositories, []);
 
       expect(axios.post).toHaveBeenCalledWith(
         mockWebhookUrl,
@@ -188,7 +186,7 @@ describe('FeishuChannel', () => {
         data: { code: 0, msg: 'success' }
       });
 
-      const result = await channel.push(repositories, []);
+      const result = await FeishuChannel.push(mockWebhookUrl, repositories, []);
 
       expect(result.success).toBe(true);
       expect(result.code).toBe(0);
@@ -201,7 +199,7 @@ describe('FeishuChannel', () => {
         data: { code: 1000, msg: 'invalid parameter' }
       });
 
-      const result = await channel.push(repositories, []);
+      const result = await FeishuChannel.push(mockWebhookUrl, repositories, []);
 
       expect(result.success).toBe(false);
     });
@@ -210,7 +208,7 @@ describe('FeishuChannel', () => {
       const repositories: RepositoryInfo[] = [];
       (axios.post as jest.Mock).mockRejectedValue(new Error('Network Error'));
 
-      const result = await channel.push(repositories, []);
+      const result = await FeishuChannel.push(mockWebhookUrl, repositories, []);
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('Network Error');
@@ -220,7 +218,7 @@ describe('FeishuChannel', () => {
       const repositories: RepositoryInfo[] = [];
       (axios.post as jest.Mock).mockRejectedValue(new Error('Connection timeout'));
 
-      const result = await channel.push(repositories, []);
+      const result = await FeishuChannel.push(mockWebhookUrl, repositories, []);
 
       expect(result.error).toBe('Connection timeout');
     });
@@ -257,7 +255,7 @@ describe('FeishuChannel', () => {
         data: { code: 0, msg: 'success' }
       });
 
-      const result = await channel.push(newRepos, seenRepos);
+      const result = await FeishuChannel.push(mockWebhookUrl, newRepos, seenRepos);
 
       expect(result.success).toBe(true);
       expect(axios.post).toHaveBeenCalled();
@@ -287,7 +285,7 @@ describe('FeishuChannel', () => {
         data: { code: 0, msg: 'success' }
       });
 
-      const result = await channel.push(newRepos, seenRepos);
+      const result = await FeishuChannel.push(mockWebhookUrl, newRepos, seenRepos);
 
       expect(result.success).toBe(true);
     });

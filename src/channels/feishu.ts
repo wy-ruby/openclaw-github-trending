@@ -22,7 +22,7 @@ export class FeishuChannel {
    * @param seenRepositories Array of seen repositories to display
    * @returns Feishu card object
    */
-  private buildCard(
+  static buildCard(
     newRepositories: RepositoryInfo[],
     seenRepositories: RepositoryInfo[]
   ): FeishuCard {
@@ -37,14 +37,14 @@ export class FeishuChannel {
     const title = `GitHub Trending - ${dateStr}`;
 
     // Build new repositories section
-    const newReposSection = this.buildRepositoriesSection(
+    const newReposSection = FeishuChannel.buildRepositoriesSection(
       '🔥 新上榜项目',
       newRepositories,
       'waph'
     );
 
     // Build seen repositories section (pinned/constant榜)
-    const seenReposSection = this.buildRepositoriesSection(
+    const seenReposSection = FeishuChannel.buildRepositoriesSection(
       '⭐ 持续霸榜项目',
       seenRepositories,
       'gray'
@@ -95,7 +95,7 @@ export class FeishuChannel {
    * @param template Card template color
    * @returns Feishu card section element
    */
-  private buildRepositoriesSection(
+  static buildRepositoriesSection(
     title: string,
     repositories: RepositoryInfo[],
     template: string
@@ -123,7 +123,7 @@ export class FeishuChannel {
 
     // Build repository cards
     repositories.forEach((repo, index) => {
-      const repoElement = this.buildRepoElement(repo, index);
+      const repoElement = FeishuChannel.buildRepoElement(repo, index);
       elements.push(repoElement);
     });
 
@@ -139,17 +139,17 @@ export class FeishuChannel {
    * @param index Index of repository
    * @returns Feishu card element
    */
-  private buildRepoElement(repo: RepositoryInfo, index: number): any {
-    const starText = this.formatNumberWithK(repo.stars);
-    const forkText = repo.forks ? ` · ${this.formatNumberWithK(repo.forks)} Forks` : '';
+  static buildRepoElement(repo: RepositoryInfo, index: number): any {
+    const starText = FeishuChannel.formatNumberWithK(repo.stars);
+    const forkText = repo.forks ? ` · ${FeishuChannel.formatNumberWithK(repo.forks)} Forks` : '';
     const languageBadge = repo.language
-      ? ` <badge text="${repo.language}" bg_color="${this.getLanguageColor(repo.language)}"/>`
+      ? ` <badge text="${repo.language}" bg_color="${FeishuChannel.getLanguageColor(repo.language)}"/>`
       : '';
 
     return {
       tag: 'div',
       text: {
-        content: `<font color="${this.getStarColor(repo.stars)}">🌟 ${starText}</font>${forkText}${languageBadge}\n${this.escapeMarkdown(repo.description)}`,
+        content: `<font color="${FeishuChannel.getStarColor(repo.stars)}">🌟 ${starText}</font>${forkText}${languageBadge}\n${FeishuChannel.escapeMarkdown(repo.description)}`,
         tag: 'l aims-text'
       },
       extra: {
@@ -171,7 +171,7 @@ export class FeishuChannel {
    * @param num Number to format
    * @returns Formatted string
    */
-  private formatNumberWithK(num: number): string {
+  static formatNumberWithK(num: number): string {
     if (num >= 1000) {
       return (num / 1000).toFixed(1) + 'k';
     }
@@ -183,7 +183,7 @@ export class FeishuChannel {
    * @param stars Number of stars
    * @returns Color code
    */
-  private getStarColor(stars: number): string {
+  static getStarColor(stars: number): string {
     if (stars >= 10000) return 'red';
     if (stars >= 5000) return 'orange';
     if (stars >= 1000) return 'blue';
@@ -195,7 +195,7 @@ export class FeishuChannel {
    * @param language Programming language
    * @returns Color code
    */
-  private getLanguageColor(language: string): string {
+  static getLanguageColor(language: string): string {
     const colors: Record<string, string> = {
       JavaScript: '#f1e05a',
       TypeScript: '#3178c6',
@@ -225,7 +225,7 @@ export class FeishuChannel {
    * @param text Markdown text
    * @returns Escaped text
    */
-  private escapeMarkdown(text: string): string {
+  static escapeMarkdown(text: string): string {
     // Replace newlines with space for card display
     return text.replace(/\n/g, ' ');
   }
@@ -236,14 +236,15 @@ export class FeishuChannel {
    * @param seenRepositories Array of seen repositories
    * @returns Push result
    */
-  async push(
+  static async push(
+    webhookUrl: string,
     newRepositories: RepositoryInfo[],
     seenRepositories: RepositoryInfo[]
   ): Promise<PushResult> {
-    const card = this.buildCard(newRepositories, seenRepositories);
+    const card = FeishuChannel.buildCard(newRepositories, seenRepositories);
 
     try {
-      const response = await axios.post(this.webhookUrl, card, {
+      const response = await axios.post(webhookUrl, card, {
         headers: {
           'Content-Type': 'application/json'
         }
