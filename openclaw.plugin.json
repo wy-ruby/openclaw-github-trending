@@ -1,0 +1,90 @@
+{
+  "id": "github-trending",
+  "name": "GitHub Trending",
+  "version": "1.0.0",
+  "description": "Fetch GitHub trending repositories and push to Feishu or Email with AI summaries",
+  "author": "王允",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wy-ruby/openclaw-plugin-github-trending"
+  },
+  "entry": "dist/index.js",
+  "engines": {
+    "openclaw": ">=2026.1.15",
+    "node": ">=18.0.0"
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "ai": {
+        "type": "object",
+        "description": "AI configuration for generating summaries",
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": ["openai", "anthropic"],
+            "default": "openai"
+          },
+          "api_key": {
+            "type": "string",
+            "description": "AI provider API key (required)"
+          },
+          "model": {
+            "type": "string",
+            "default": "gpt-4o-mini"
+          }
+        },
+        "required": ["api_key"]
+      },
+      "channels": {
+        "type": "object",
+        "properties": {
+          "feishu": {
+            "type": "object",
+            "properties": {
+              "webhook_url": {
+                "type": "string"
+              }
+            }
+          },
+          "email": {
+            "type": "object",
+            "properties": {
+              "smtp_host": {
+                "type": "string",
+                "default": "smtp.gmail.com"
+              },
+              "smtp_port": {
+                "type": "number",
+                "default": 587
+              },
+              "sender": {
+                "type": "string"
+              },
+              "password": {
+                "type": "string"
+              }
+            },
+            "required": ["sender", "password"]
+          }
+        }
+      },
+      "history": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "default": true
+          },
+          "star_threshold": {
+            "type": "number",
+            "default": 100,
+            "description": "Re-push if stars increased by this amount"
+          }
+        }
+      }
+    },
+    "required": ["ai"]
+  }
+}

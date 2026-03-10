@@ -1,16 +1,6 @@
 /**
- * History data structure for caching processed repositories
+ * History data structures
+ * Re-exported from core/history.ts for backward compatibility
  */
-export interface HistoryProject {
-  full_name: string;
-  url: string;
-  stars: number;
-  ai_summary: string;
-  first_seen: string;
-}
 
-export interface HistoryData {
-  projects: {
-    [full_name: string]: HistoryProject;
-  };
-}
+export { RepositoryHistory, HistoryData, HistoryConfig } from '../core/history';

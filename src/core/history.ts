@@ -1,165 +1,180 @@
-import { HistoryData, HistoryProject } from '../models/history';
 import { RepositoryInfo } from '../models/repository';
-import * as fs from 'fs';
-import * as path from 'path';
+
+export interface RepositoryHistory {
+  full_name: string;
+  url: string;
+  stars: number;
+  ai_summary: string;
+  first_seen: string;
+  last_seen: string;
+  last_stars: number;
+  push_count: number;
+  last_pushed?: string;
+}
+
+export interface HistoryData {
+  repositories: Record<string, RepositoryHistory>;
+  last_updated: string;
+}
+
+export interface HistoryConfig {
+  enabled: boolean;
+  star_threshold: number;
+}
 
 /**
  * History Manager for tracking processed repositories
- * Persists history to a JSON file and provides methods to manage seen/new repositories
+ * Provides smart deduplication based on star growth
  */
 export class HistoryManager {
-  private historyPath: string;
   private data: HistoryData;
 
-  /**
-   * Create a new HistoryManager instance
-   * @param historyPath Path to the history JSON file
-   */
-  constructor(historyPath: string = this.getDefaultHistoryPath()) {
-    this.historyPath = historyPath;
-    // Initialize data first, then load if file exists
-    this.data = { projects: {} };
-    this.loadHistory();
+  constructor() {
+    this.data = {
+      repositories: {},
+      last_updated: new Date().toISOString()
+    };
   }
 
   /**
-   * Get the default history path (in the project root)
+   * Import existing history data
    */
-  private getDefaultHistoryPath(): string {
-    // Try to find a reasonable default location
-    // In a plugin context, this might be configured externally
-    return path.join(process.cwd(), '.github-trending-history.json');
+  importData(data: HistoryData): void {
+    this.data = data;
   }
 
   /**
-   * Load history from file
+   * Export history data for persistence
    */
-  private loadHistory(): void {
-    try {
-      if (fs.existsSync(this.historyPath)) {
-        const content = fs.readFileSync(this.historyPath, 'utf-8');
-        this.data = JSON.parse(content);
-      }
-    } catch (error) {
-      console.warn('Failed to load history file, starting fresh:', error);
-      // Initialize with empty project if file doesn't exist or error
-      this.data = { projects: {} };
+  exportData(): HistoryData {
+    this.data.last_updated = new Date().toISOString();
+    return this.data;
+  }
+
+  /**
+   * Get a repository's history by full name
+   */
+  getProject(fullName: string): RepositoryHistory | undefined {
+    return this.data.repositories[fullName];
+  }
+
+  /**
+   * Determine if a repository should be pushed again
+   */
+  shouldPushAgain(repo: RepositoryInfo, history: RepositoryHistory, config: HistoryConfig): boolean {
+    // Never pushed before
+    if (!history.last_pushed) {
+      return true;
     }
-  }
 
-  /**
-   * Save history to file
-   */
-  private saveHistory(): void {
-    try {
-      fs.writeFileSync(this.historyPath, JSON.stringify(this.data, null, 2));
-    } catch (error) {
-      console.warn('Failed to save history file:', error);
+    // Stars increased significantly
+    const starGrowth = repo.stars - history.last_stars;
+    if (starGrowth >= config.star_threshold) {
+      return true;
     }
+
+    return false;
   }
 
   /**
-   * Get all stored project keys
+   * Categorize repositories into new, should push, and already seen
    */
-  getProjectKeys(): string[] {
-    return Object.keys(this.data.projects);
-  }
-
-  /**
-   * Check if a repository is in the history
-   * @param fullName Repository full name (owner/repo)
-   */
-  isSeen(fullName: string): boolean {
-    return !!this.data.projects[fullName];
-  }
-
-  /**
-   * Get a stored project by full name
-   * @param fullName Repository full name (owner/repo)
-   */
-  getProject(fullName: string): HistoryProject | undefined {
-    return this.data.projects[fullName];
-  }
-
-  /**
-   * Get projects that are not in the current trending list
-   * @param currentRepos Current trending repositories
-   */
-  getLostProjects(currentRepos: RepositoryInfo[]): HistoryProject[] {
-    const currentKeys = new Set(currentRepos.map(r => r.full_name));
-    return Object.values(this.data.projects).filter(p => !currentKeys.has(p.full_name));
-  }
-
-  /**
-   * Mark repositories as seen and update their information
-   * @param repos Repositories to mark as seen
-   * @returns Array of newly seen repositories (not previously in history)
-   */
-  markSeen(repos: RepositoryInfo[]): { newlySeen: RepositoryInfo[]; alreadySeen: RepositoryInfo[] } {
+  categorizeRepositories(
+    repositories: RepositoryInfo[],
+    config: HistoryConfig
+  ): {
+    newlySeen: RepositoryInfo[];
+    shouldPush: RepositoryInfo[];
+    alreadySeen: RepositoryInfo[];
+  } {
     const newlySeen: RepositoryInfo[] = [];
+    const shouldPush: RepositoryInfo[] = [];
     const alreadySeen: RepositoryInfo[] = [];
 
-    const now = new Date().toISOString();
+    for (const repo of repositories) {
+      const history = this.data.repositories[repo.full_name];
 
-    repos.forEach(repo => {
-      if (this.data.projects[repo.full_name]) {
-        // Update existing project
-        const existing = this.data.projects[repo.full_name];
-        existing.stars = repo.stars;
-        existing.url = repo.url;
+      if (!history) {
+        // First time seeing this repository
+        newlySeen.push(repo);
+        shouldPush.push(repo);
+      } else if (config.enabled && this.shouldPushAgain(repo, history, config)) {
+        // Seen before, but should push again (star growth)
+        shouldPush.push(repo);
         alreadySeen.push(repo);
       } else {
-        // Add new project
-        this.data.projects[repo.full_name] = {
+        // Seen before, don't push again
+        alreadySeen.push(repo);
+      }
+    }
+
+    return { newlySeen, shouldPush, alreadySeen };
+  }
+
+  /**
+   * Mark repositories as pushed and update history
+   */
+  markPushed(repositories: RepositoryInfo[]): void {
+    const now = new Date().toISOString();
+
+    for (const repo of repositories) {
+      const existing = this.data.repositories[repo.full_name];
+
+      if (existing) {
+        // Update existing record
+        existing.last_seen = now;
+        existing.last_stars = repo.stars;
+        existing.stars = repo.stars;
+        existing.ai_summary = repo.ai_summary || existing.ai_summary;
+        existing.push_count += 1;
+        existing.last_pushed = now;
+      } else {
+        // Create new record
+        this.data.repositories[repo.full_name] = {
           full_name: repo.full_name,
           url: repo.url,
           stars: repo.stars,
           ai_summary: repo.ai_summary || '',
-          first_seen: now
+          first_seen: now,
+          last_seen: now,
+          last_stars: repo.stars,
+          push_count: 1,
+          last_pushed: now
         };
-       (repo as any).first_seen = now;
-        newlySeen.push(repo);
       }
-    });
-
-    this.saveHistory();
-    return { newlySeen, alreadySeen };
-  }
-
-  /**
-   * Update AI summary for a repository
-   * @param fullName Repository full name
-   * @param summary AI summary to store
-   */
-  updateAiSummary(fullName: string, summary: string): void {
-    if (this.data.projects[fullName]) {
-      this.data.projects[fullName].ai_summary = summary;
-      this.saveHistory();
     }
   }
 
   /**
-   * Export all history data
+   * Update AI summary for a repository
    */
-  exportData(): HistoryData {
-    return { ...this.data };
+  updateAiSummary(fullName: string, summary: string): void {
+    const history = this.data.repositories[fullName];
+    if (history) {
+      history.ai_summary = summary;
+    }
   }
 
   /**
-   * Import history data from an external source
-   * @param data History data to import
+   * Get statistics about history
    */
-  importData(data: HistoryData): void {
-    this.data = data;
-    this.saveHistory();
-  }
+  getStats(): {
+    total_repositories: number;
+    total_pushes: number;
+    oldest_entry?: string;
+    newest_entry?: string;
+  } {
+    const repos = Object.values(this.data.repositories);
+    const total_pushes = repos.reduce((sum, r) => sum + r.push_count, 0);
 
-  /**
-   * Clear all history
-   */
-  clear(): void {
-    this.data = { projects: {} };
-    this.saveHistory();
+    const timestamps = repos.map(r => r.first_seen).sort();
+
+    return {
+      total_repositories: repos.length,
+      total_pushes,
+      oldest_entry: timestamps[0],
+      newest_entry: timestamps[timestamps.length - 1]
+    };
   }
 }
 

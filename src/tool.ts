@@ -5,7 +5,7 @@ import { FeishuChannel } from './channels/feishu';
 import { EmailChannel } from './channels/email';
 import { ConfigManager } from './core/config';
 import { RepositoryInfo } from './models/repository';
-import { GitHubTrendingParams, GitHubTrendingResult, PluginConfig, AIConfig, FeishuConfig, EmailConfig, HistoryProject } from './models/config';
+import { GitHubTrendingParams, GitHubTrendingResult, PluginConfig, AIConfig, FeishuConfig, EmailConfig } from './models/config';
 import { PushResult } from './channels/types';
 import { OpenClawConfig, EmailConfig as InternalEmailConfig } from './core/config';
 
@@ -102,8 +102,10 @@ async function githubTrendingHandler(
   } catch (error) {
     return {
       success: false,
+      pushed_count: 0,
       new_count: 0,
       seen_count: 0,
+      total_count: 0,
       pushed_to: channel,
       timestamp: new Date().toISOString(),
       message: `Failed to fetch trending: ${error instanceof Error ? error.message : 'Unknown error'}`
@@ -116,40 +118,30 @@ async function githubTrendingHandler(
     historyManager.importData(historyData);
   }
 
-  const projects: HistoryProject[] = repositories.map(repo => ({
-    full_name: repo.full_name,
-    url: repo.url,
-    stars: repo.stars,
-    ai_summary: repo.ai_summary || '',
-    first_seen: repo.first_seen || ''
-  }));
-
-  // Mark repositories as seen and get new/seen separation
-  const { newlySeen, alreadySeen } = historyManager.markSeen(repositories);
-  const seenRepositories = repositories.filter((r: RepositoryInfo) =>
-    alreadySeen.some((s: RepositoryInfo) => s.full_name === r.full_name)
-  );
-  const newRepositories = repositories.filter((r: RepositoryInfo) =>
-    newlySeen.some((n: RepositoryInfo) => n.full_name === r.full_name)
+  // Categorize repositories
+  const historyConfig = {
+    enabled: pluginConfig?.history?.enabled ?? true,
+    star_threshold: pluginConfig?.history?.star_threshold ?? 100
+  };
+  const { newlySeen, shouldPush, alreadySeen } = historyManager.categorizeRepositories(
+    repositories,
+    historyConfig
   );
 
-  // Step 4: Generate AI summaries for new repositories concurrently
+  // Step 4: Generate AI summaries for repositories to push
   let processedRepositories: RepositoryInfo[] = [];
   try {
-    processedRepositories = await processRepositoriesWithAI(newRepositories, summarizer);
+    processedRepositories = await processRepositoriesWithAI(shouldPush, summarizer);
   } catch (error) {
     // Continue with empty summaries if AI processing fails
-    processedRepositories = newRepositories.map((r: RepositoryInfo) => ({ ...r, ai_summary: '' }));
+    processedRepositories = shouldPush.map((r: RepositoryInfo) => ({ ...r, ai_summary: '' }));
   }
 
-  // Update AI summaries in history manager
-  processedRepositories.forEach((repo: RepositoryInfo) => {
-    historyManager.updateAiSummary(repo.full_name, repo.ai_summary || '');
-  });
+  // Update history
+  historyManager.markPushed(processedRepositories);
 
-  // Reconstruct new and seen arrays with AI summaries
-  const newReposWithSummary = processedRepositories;
-  const seenReposWithSummary = seenRepositories.map((r: RepositoryInfo) => ({
+  // Prepare seen repositories with AI summaries
+  const seenReposWithSummary = alreadySeen.map((r: RepositoryInfo) => ({
     ...r,
     ai_summary: historyManager.getProject(r.full_name)?.ai_summary || ''
   }));
@@ -162,22 +154,26 @@ async function githubTrendingHandler(
     if (!webhookUrl) {
       return {
         success: false,
-        new_count: newReposWithSummary.length,
-        seen_count: seenReposWithSummary.length,
+        pushed_count: 0,
+        new_count: newlySeen.length,
+        seen_count: alreadySeen.length,
+        total_count: repositories.length,
         pushed_to: 'feishu',
         timestamp: new Date().toISOString(),
         message: 'Feishu webhook URL not provided'
       };
     }
 
-    pushResult = await FeishuChannel.push(webhookUrl, newReposWithSummary, seenReposWithSummary);
+    pushResult = await FeishuChannel.push(webhookUrl, processedRepositories, seenReposWithSummary);
   } else if (channel === 'email') {
     const emailTo = email_to || pluginConfig?.channels?.email?.sender;
     if (!emailTo) {
       return {
         success: false,
-        new_count: newReposWithSummary.length,
-        seen_count: seenReposWithSummary.length,
+        pushed_count: 0,
+        new_count: newlySeen.length,
+        seen_count: alreadySeen.length,
+        total_count: repositories.length,
         pushed_to: 'email',
         timestamp: new Date().toISOString(),
         message: 'Email recipient not provided'
@@ -201,12 +197,14 @@ async function githubTrendingHandler(
       }
     };
 
-    pushResult = await EmailChannel.send(internalEmailConfig, newReposWithSummary, seenReposWithSummary);
+    pushResult = await EmailChannel.send(internalEmailConfig, processedRepositories, seenReposWithSummary);
   } else {
     return {
       success: false,
+      pushed_count: 0,
       new_count: 0,
       seen_count: 0,
+      total_count: repositories.length,
       pushed_to: channel,
       timestamp: new Date().toISOString(),
       message: `Invalid channel: ${channel}`
@@ -217,8 +215,10 @@ async function githubTrendingHandler(
   if (pushResult.success) {
     return {
       success: true,
-      new_count: newReposWithSummary.length,
-      seen_count: seenReposWithSummary.length,
+      pushed_count: processedRepositories.length,
+      new_count: newlySeen.length,
+      seen_count: alreadySeen.length,
+      total_count: repositories.length,
       pushed_to: channel,
       timestamp: new Date().toISOString(),
       message: pushResult.msg || (pushResult.messageId ? `Email sent: ${pushResult.messageId}` : 'Pushed successfully')
@@ -226,8 +226,10 @@ async function githubTrendingHandler(
   } else {
     return {
       success: false,
-      new_count: newReposWithSummary.length,
-      seen_count: seenReposWithSummary.length,
+      pushed_count: processedRepositories.length,
+      new_count: newlySeen.length,
+      seen_count: alreadySeen.length,
+      total_count: repositories.length,
       pushed_to: channel,
       timestamp: new Date().toISOString(),
       message: pushResult.error || `Push failed with code: ${pushResult.code}`

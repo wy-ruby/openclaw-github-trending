@@ -35,11 +35,20 @@ export interface ChannelsConfig {
 }
 
 /**
+ * History configuration
+ */
+export interface HistoryConfig {
+  enabled?: boolean;
+  star_threshold?: number;
+}
+
+/**
  * Plugin configuration
  */
 export interface PluginConfig {
   ai?: AIConfig;
   channels?: ChannelsConfig;
+  history?: HistoryConfig;
   max_workers?: number;
   github_token?: string;
 }
@@ -59,29 +68,11 @@ export interface GitHubTrendingParams {
  */
 export interface GitHubTrendingResult {
   success: boolean;
+  pushed_count: number;
   new_count: number;
   seen_count: number;
+  total_count: number;
   pushed_to: string;
   timestamp: string;
   message: string;
-}
-
-/**
- * History project interface
- */
-export interface HistoryProject {
-  full_name: string;
-  url: string;
-  stars: number;
-  ai_summary: string;
-  first_seen: string;
-}
-
-/**
- * History data interface
- */
-export interface HistoryData {
-  projects: {
-    [full_name: string]: HistoryProject;
-  };
 }

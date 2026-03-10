@@ -3,7 +3,8 @@ import { AISummarizer } from '../src/core/summarizer';
 import { FeishuChannel } from '../src/channels/feishu';
 import { EmailChannel } from '../src/channels/email';
 import { HistoryManager } from '../src/core/history';
-import { GitHubTrendingParams, HistoryData } from '../src/models/config';
+import { GitHubTrendingParams } from '../src/models/config';
+import { HistoryData } from '../src/core/history';
 import { RepositoryInfo } from '../src/models/repository';
 import { PushResult } from '../src/channels/types';
 import * as toolModule from '../src/tool';
@@ -21,24 +22,31 @@ let currentHistoryData: HistoryData | null = null;
 // Create the mock history manager - this will be called in beforeEach
 function createMockHistoryManager() {
   return {
-    markSeen: jest.fn((repos: RepositoryInfo[]) => {
+    categorizeRepositories: jest.fn((repos: RepositoryInfo[], config: any) => {
       const newlySeen: RepositoryInfo[] = [];
+      const shouldPush: RepositoryInfo[] = [];
       const alreadySeen: RepositoryInfo[] = [];
 
       repos.forEach(repo => {
-        if (currentHistoryData && currentHistoryData.projects[repo.full_name]) {
+        if (currentHistoryData && currentHistoryData.repositories[repo.full_name]) {
           alreadySeen.push(repo);
+          // Check if should push based on star threshold
+          const history = currentHistoryData.repositories[repo.full_name];
+          if (config.enabled && (repo.stars - history.last_stars) >= config.star_threshold) {
+            shouldPush.push(repo);
+          }
         } else {
           newlySeen.push(repo);
+          shouldPush.push(repo);
         }
       });
 
-      return { newlySeen, alreadySeen };
+      return { newlySeen, shouldPush, alreadySeen };
     }),
-    updateAiSummary: jest.fn(),
+    markPushed: jest.fn(),
     getProject: jest.fn((fullName: string) => {
-      if (currentHistoryData && currentHistoryData.projects[fullName]) {
-        return currentHistoryData.projects[fullName];
+      if (currentHistoryData && currentHistoryData.repositories[fullName]) {
+        return currentHistoryData.repositories[fullName];
       }
       return undefined;
     }),
@@ -46,6 +54,7 @@ function createMockHistoryManager() {
       currentHistoryData = data;
     }),
     exportData: jest.fn(),
+    updateAiSummary: jest.fn(),
     clear: jest.fn()
   };
 }
@@ -151,15 +160,20 @@ describe('githubTrendingTool', () => {
     };
 
     const mockHistoryDataObj: HistoryData = {
-      projects: {
+      repositories: {
         'user/repo-1': {
           full_name: 'user/repo-1',
           url: 'https://github.com/user/repo-1',
           stars: 1000,
           ai_summary: 'AI summary for repository 1',
-          first_seen: '2026-03-08T10:00:00Z'
+          first_seen: '2026-03-08T10:00:00Z',
+          last_seen: '2026-03-08T10:00:00Z',
+          last_stars: 900,
+          push_count: 1,
+          last_pushed: '2026-03-08T10:00:00Z'
         }
-      }
+      },
+      last_updated: '2026-03-08T10:00:00Z'
     };
 
     describe('successful execution', () => {

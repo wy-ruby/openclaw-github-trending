@@ -1,25 +1,59 @@
 {
   "name": "openclaw-plugin-github-trending",
   "version": "1.0.0",
-  "description": "OpenClaw plugin for fetching GitHub trending repositories and pushing to Feishu/Email",
-  "main": "index.js",
+  "description": "OpenClaw plugin for fetching GitHub trending repositories and pushing to Feishu or Email with AI summaries",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage"
+    "test:coverage": "jest --coverage",
+    "prepublishOnly": "npm run build && npm test"
   },
-  "keywords": [],
-  "author": "Your Name",
+  "keywords": [
+    "openclaw",
+    "openclaw-plugin",
+    "github",
+    "trending",
+    "feishu",
+    "email",
+    "ai",
+    "notifications",
+    "automation"
+  ],
+  "author": {
+    "name": "王允",
+    "email": "906971957@qq.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wy-ruby/openclaw-plugin-github-trending.git"
+  },
+  "bugs": {
+    "url": "https://github.com/wy-ruby/openclaw-plugin-github-trending/issues"
+  },
+  "homepage": "https://github.com/wy-ruby/openclaw-plugin-github-trending#readme",
   "license": "MIT",
   "type": "commonjs",
+  "files": [
+    "dist",
+    "openclaw.plugin.json",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "peerDependencies": {
+    "openclaw": ">=2026.1.15"
+  },
   "dependencies": {
     "axios": "^1.13.6",
     "cheerio": "^1.2.0",
     "marked": "^17.0.4",
     "nodemailer": "^8.0.2",
     "openai": "^6.27.0",
-    "sanitize-html": "^2.17.1"
+    "sanitize-html": "^2.17.1",
+    "zod": "^3.22.0"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",
@@ -29,5 +63,8 @@
     "jest": "^30.2.0",
     "ts-jest": "^29.4.6",
     "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
