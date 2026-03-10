@@ -19,51 +19,90 @@
     "properties": {
       "ai": {
         "type": "object",
-        "description": "AI configuration for generating summaries",
+        "description": "AI configuration for generating summaries. Falls back to OpenClaw's AI config if not provided.",
         "properties": {
           "provider": {
             "type": "string",
             "enum": ["openai", "anthropic"],
-            "default": "openai"
+            "default": "openai",
+            "description": "AI provider (OpenAI-compatible or Anthropic)"
           },
           "api_key": {
             "type": "string",
-            "description": "AI provider API key (required)"
+            "description": "AI provider API key"
+          },
+          "base_url": {
+            "type": "string",
+            "description": "API base URL (for OpenAI-compatible providers)"
           },
           "model": {
             "type": "string",
-            "default": "gpt-4o-mini"
+            "default": "gpt-4o-mini",
+            "description": "Model name for summarization"
           }
-        },
-        "required": ["api_key"]
+        }
+      },
+      "github_token": {
+        "type": "string",
+        "description": "GitHub personal access token (optional, increases rate limit)"
+      },
+      "max_workers": {
+        "type": "number",
+        "default": 5,
+        "minimum": 1,
+        "maximum": 20,
+        "description": "Concurrent workers for AI summarization (recommended: 3-10)"
       },
       "channels": {
         "type": "object",
+        "description": "Push channel configurations",
         "properties": {
           "feishu": {
             "type": "object",
+            "description": "Feishu webhook configuration",
             "properties": {
               "webhook_url": {
-                "type": "string"
+                "type": "string",
+                "description": "Feishu bot webhook URL"
               }
             }
           },
           "email": {
             "type": "object",
+            "description": "Email SMTP configuration",
             "properties": {
               "smtp_host": {
                 "type": "string",
-                "default": "smtp.gmail.com"
+                "default": "smtp.gmail.com",
+                "description": "SMTP server host"
               },
               "smtp_port": {
                 "type": "number",
-                "default": 587
+                "default": 587,
+                "description": "SMTP server port"
+              },
+              "use_tls": {
+                "type": "boolean",
+                "default": true,
+                "description": "Use TLS/STARTTLS"
               },
               "sender": {
-                "type": "string"
+                "type": "string",
+                "description": "Sender email address"
               },
               "password": {
-                "type": "string"
+                "type": "string",
+                "description": "Email password or app-specific password"
+              },
+              "from_name": {
+                "type": "string",
+                "default": "GitHub Trending",
+                "description": "Display name for sender"
+              },
+              "timeout": {
+                "type": "number",
+                "default": 30,
+                "description": "SMTP connection timeout in seconds"
               }
             },
             "required": ["sender", "password"]
@@ -72,19 +111,21 @@
       },
       "history": {
         "type": "object",
+        "description": "History and deduplication settings",
         "properties": {
           "enabled": {
             "type": "boolean",
-            "default": true
+            "default": true,
+            "description": "Enable history tracking and deduplication"
           },
           "star_threshold": {
             "type": "number",
             "default": 100,
+            "minimum": 0,
             "description": "Re-push if stars increased by this amount"
           }
         }
       }
-    },
-    "required": ["ai"]
+    }
   }
 }

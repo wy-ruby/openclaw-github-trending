@@ -2,6 +2,7 @@
  * AI configuration
  */
 export interface AIConfig {
+  provider?: 'openai' | 'anthropic';
   api_key?: string;
   base_url?: string;
   model?: string;
@@ -24,6 +25,7 @@ export interface EmailConfig {
   sender?: string;
   password?: string;
   from_name?: string;
+  timeout?: number;
 }
 
 /**
@@ -58,7 +60,8 @@ export interface PluginConfig {
  */
 export interface GitHubTrendingParams {
   since: 'daily' | 'weekly' | 'monthly';
-  channel: 'feishu' | 'email';
+  channel?: 'feishu' | 'email';  // 已废弃，建议使用 channels
+  channels?: ('feishu' | 'email')[];  // 新的多通道支持
   email_to?: string;
   feishu_webhook?: string;
 }

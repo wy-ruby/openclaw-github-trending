@@ -27,6 +27,8 @@ openclaw plugins install openclaw-plugin-github-trending
 
 在 `.openclaw/openclaw.json` 中添加 AI 配置：
 
+**使用 OpenAI：**
+
 ```json
 {
   "plugins": {
@@ -36,6 +38,25 @@ openclaw plugins install openclaw-plugin-github-trending
         "api_key": "sk-xxx",
         "model": "gpt-4o-mini"
       }
+    }
+  }
+}
+```
+
+**使用自定义供应商（如灵积、月之暗面等）：**
+
+```json
+{
+  "plugins": {
+    "github-trending": {
+      "ai": {
+        "provider": "openai",
+        "api_key": "sk-xxx",
+        "base_url": "https://coding.dashscope.aliyuncs.com/v1",
+        "model": "kimi-k2.5"
+      },
+      "max_workers": 5,
+      "github_token": "github_pat_xxx"
     }
   }
 }
@@ -112,11 +133,52 @@ openclaw plugins install openclaw-plugin-github-trending
 
 ### AI 配置
 
+插件支持兼容 OpenAI API 的供应商。如果插件中未配置，将使用 OpenClaw 的 AI 配置。
+
 | 字段 | 类型 | 必填 | 默认值 | 说明 |
 |-------|------|----------|---------|-------------|
 | `provider` | string | 否 | `"openai"` | AI 提供商（`"openai"` 或 `"anthropic"`） |
-| `api_key` | string | 是 | - | AI 提供商的 API Key |
-| `model` | string | 否 | `"gpt-4o-mini"` | 用于生成摘要的模型 |
+| `api_key` | string | 否* | - | AI 提供商的 API Key |
+| `base_url` | string | 否 | `"https://api.openai.com/v1"` | API 基础 URL（用于兼容 OpenAI 的供应商） |
+| `model` | string | 否 | `"gpt-4o-mini"` | 用于生成摘要的模型名称 |
+
+*如果未提供，将使用 OpenClaw 的默认 AI 配置
+
+#### 支持的 AI 供应商
+
+- **OpenAI**: `provider: "openai"`，使用默认 base URL
+- **Anthropic**: `provider: "anthropic"`
+- **自定义供应商**: 任何兼容 OpenAI API 的服务（如：灵积、月之暗面、DeepSeek 等）
+
+**自定义供应商示例：**
+
+```json
+{
+  "ai": {
+    "provider": "openai",
+    "api_key": "sk-xxx",
+    "base_url": "https://coding.dashscope.aliyuncs.com/v1",
+    "model": "kimi-k2.5"
+  }
+}
+```
+
+### GitHub 配置
+
+| 字段 | 类型 | 必填 | 默认值 | 说明 |
+|-------|------|----------|---------|-------------|
+| `github_token` | string | 否 | - | GitHub 个人访问令牌（提高速率限制） |
+
+**为什么要配置 GitHub Token？**
+- 无 Token: 60 次/小时限制
+- 有 Token: 5000 次/小时限制
+- 获取 Token: https://github.com/settings/tokens
+
+### 并发配置
+
+| 字段 | 类型 | 必填 | 默认值 | 说明 |
+|-------|------|----------|---------|-------------|
+| `max_workers` | number | 否 | `5` | AI 摘要并发数（建议：3-10） |
 
 ### 推送渠道配置
 
@@ -132,8 +194,11 @@ openclaw plugins install openclaw-plugin-github-trending
 |-------|------|----------|---------|-------------|
 | `smtp_host` | string | 否 | `"smtp.gmail.com"` | SMTP 服务器地址 |
 | `smtp_port` | number | 否 | `587` | SMTP 服务器端口 |
+| `use_tls` | boolean | 否 | `true` | 使用 TLS/STARTTLS |
 | `sender` | string | 是* | - | 发件人邮箱地址 |
 | `password` | string | 是* | - | 邮箱密码或应用专用密码 |
+| `from_name` | string | 否 | `"GitHub Trending"` | 发件人显示名称 |
+| `timeout` | number | 否 | `30` | SMTP 连接超时时间（秒） |
 
 *使用该渠道时必填
 

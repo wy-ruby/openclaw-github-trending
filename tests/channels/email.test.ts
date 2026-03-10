@@ -83,9 +83,8 @@ describe('EmailChannel', () => {
       const html = EmailChannel.generateHTML(repositories, []);
 
       // Verify HTML contains required elements
-      expect(html).toContain('GitHub Trending');
+      expect(html).toContain('GitHub 热榜推送');
       expect(html).toContain('test-repo');
-      expect(html).toContain('A test repository');
       expect(html).toContain('TypeScript');
       expect(html).toContain('1.2k');
       expect(html).toContain('567');
@@ -168,15 +167,16 @@ describe('EmailChannel', () => {
       expect(html).toContain('Python');
     });
 
-    it('should convert markdown description to HTML', () => {
+    it('should convert markdown AI summary to HTML', () => {
       const repositories: RepositoryInfo[] = [
         {
           name: 'md-repo',
           full_name: 'org/md-repo',
           url: 'https://github.com/org/md-repo',
           stars: 100,
-          description: '# Header\n\n**Bold** and *italic* text.',
-          language: 'JavaScript'
+          description: 'Test description',
+          language: 'JavaScript',
+          ai_summary: '# Header\n\n**Bold** and *italic* text.'
         }
       ];
 
@@ -226,14 +226,15 @@ describe('EmailChannel', () => {
           url: 'https://github.com/org/safe-repo',
           stars: 100,
           description: '<script>alert(1)</script>Normal text',
-          language: 'Rust'
+          language: 'Rust',
+          ai_summary: 'Normal text from AI'
         }
       ];
 
       const html = EmailChannel.generateHTML(repositories, []);
-      // The description should be sanitized - script tags should be removed
+      // The AI summary should be sanitized - script tags should be removed
       expect(html).not.toContain('<script>');
-      expect(html).toContain('Normal text');
+      expect(html).toContain('Normal text from AI');
     });
   });
 

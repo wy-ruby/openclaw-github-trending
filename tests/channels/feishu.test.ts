@@ -32,7 +32,7 @@ describe('FeishuChannel', () => {
       expect(card.config).toHaveProperty('wide_screen_mode', true);
       expect(card.header).toBeDefined();
       expect(card.header?.title).toBeDefined();
-      expect(card.header?.template).toBe('waph');
+      expect(card.header?.template).toBe('blue');
 
       // Verify new repositories section exists
       expect(card.elements).toBeDefined();
@@ -45,7 +45,7 @@ describe('FeishuChannel', () => {
 
       const title = card.header?.title;
       expect(title).toBeDefined();
-      expect(title?.content).toContain('GitHub Trending');
+      expect(title?.content).toContain('GitHub 热榜推送');
     });
 
     it('should build card with both new and seen repositories', () => {

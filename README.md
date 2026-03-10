@@ -27,6 +27,8 @@ openclaw plugins install openclaw-plugin-github-trending
 
 Add your AI provider configuration to `.openclaw/openclaw.json`:
 
+**Using OpenAI:**
+
 ```json
 {
   "plugins": {
@@ -36,6 +38,25 @@ Add your AI provider configuration to `.openclaw/openclaw.json`:
         "api_key": "sk-xxx",
         "model": "gpt-4o-mini"
       }
+    }
+  }
+}
+```
+
+**Using custom provider (e.g., DashScope, Moonshot):**
+
+```json
+{
+  "plugins": {
+    "github-trending": {
+      "ai": {
+        "provider": "openai",
+        "api_key": "sk-xxx",
+        "base_url": "https://coding.dashscope.aliyuncs.com/v1",
+        "model": "kimi-k2.5"
+      },
+      "max_workers": 5,
+      "github_token": "github_pat_xxx"
     }
   }
 }
@@ -112,11 +133,52 @@ Define automated tasks in `.openclaw/openclaw.json`:
 
 ### AI Configuration
 
+The plugin supports OpenAI-compatible API providers. If not configured in the plugin, it will fall back to OpenClaw's AI configuration.
+
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
 | `provider` | string | No | `"openai"` | AI provider (`"openai"` or `"anthropic"`) |
-| `api_key` | string | Yes | - | API key for the AI provider |
-| `model` | string | No | `"gpt-4o-mini"` | Model to use for summarization |
+| `api_key` | string | No* | - | AI provider API key |
+| `base_url` | string | No | `"https://api.openai.com/v1"` | API base URL for OpenAI-compatible providers |
+| `model` | string | No | `"gpt-4o-mini"` | Model name for summarization |
+
+*If not provided, will use OpenClaw's default AI configuration
+
+#### Supported AI Providers
+
+- **OpenAI**: `provider: "openai"`, default base URL
+- **Anthropic**: `provider: "anthropic"`
+- **Custom providers**: Any OpenAI-compatible API (e.g., DashScope, Moonshot, DeepSeek, etc.)
+
+**Example with custom provider:**
+
+```json
+{
+  "ai": {
+    "provider": "openai",
+    "api_key": "sk-xxx",
+    "base_url": "https://coding.dashscope.aliyuncs.com/v1",
+    "model": "kimi-k2.5"
+  }
+}
+```
+
+### GitHub Configuration
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `github_token` | string | No | - | GitHub personal access token (increases rate limit) |
+
+**Why configure GitHub token?**
+- Without token: 60 requests/hour limit
+- With token: 5000 requests/hour limit
+- Get your token: https://github.com/settings/tokens
+
+### Concurrency Configuration
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `max_workers` | number | No | `5` | Concurrent workers for AI summarization (recommended: 3-10) |
 
 ### Channel Configuration
 
@@ -132,10 +194,13 @@ Define automated tasks in `.openclaw/openclaw.json`:
 |-------|------|----------|---------|-------------|
 | `smtp_host` | string | No | `"smtp.gmail.com"` | SMTP server host |
 | `smtp_port` | number | No | `587` | SMTP server port |
+| `use_tls` | boolean | No | `true` | Use TLS/STARTTLS |
 | `sender` | string | Yes* | - | Sender email address |
 | `password` | string | Yes* | - | Email password or app-specific password |
+| `from_name` | string | No | `"GitHub Trending"` | Display name for sender |
+| `timeout` | number | No | `30` | SMTP connection timeout in seconds |
 
-*Required if using that channel
+*Required if using email channel
 
 ### History Configuration
 

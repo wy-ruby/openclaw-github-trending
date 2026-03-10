@@ -192,10 +192,13 @@ describe('GitHubFetcher', () => {
       expect(readme).toBe('');
     });
 
-    it('should throw error for other HTTP errors', async () => {
+    it('should return empty string for other HTTP errors', async () => {
       (axios.get as jest.Mock).mockRejectedValue(new Error('Internal Server Error'));
 
-      await expect(fetcher.fetchReadme('test-user/test-repo')).rejects.toThrow('Failed to fetch README');
+      const readme = await fetcher.fetchReadme('test-user/test-repo');
+
+      // New implementation catches errors and returns empty string
+      expect(readme).toBe('');
     });
   });
 });

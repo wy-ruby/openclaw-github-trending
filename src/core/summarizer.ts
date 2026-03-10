@@ -82,7 +82,7 @@ ${readme_content}
     }
 
     prompt += `
-请根据以上信息生成一个 100-200 字的中文摘要，包含：
+请根据以上信息以及你从网络上搜集到的该 github 项目的相关信息，生成一个 200-300 字的中文摘要，包含：
 1. 仓库的主要功能和用途
 2. 核心特性
 3. 适合的使用场景
@@ -122,6 +122,53 @@ ${readme_content}
       return summary.trim();
     } catch (error) {
       console.error('Failed to generate AI summary:', error);
+      return '';
+    }
+  }
+
+  /**
+   * Generate AI summary from README content
+   * @param fullName Repository full name (owner/repo)
+   * @param readmeContent README.md content
+   * @returns AI-generated summary in Chinese, or empty string if failed
+   */
+  async summarizeReadme(fullName: string, readmeContent: string): Promise<string> {
+    const prompt = `你是一个资深的技术专家。请根据以下 GitHub 项目的 README 内容，用中文简明扼要地总结它的核心功能和使用场景。
+
+项目名称：${fullName}
+
+README 内容：
+${readmeContent}
+
+请生成一个 200-300 字的中文摘要，包含：
+1. 项目的主要功能和用途
+2. 核心特性
+3. 适合的使用场景
+
+摘要应该简洁明了，突出重点。`;
+
+    try {
+      const response = await this.client.chat.completions.create({
+        model: this.model,
+        messages: [
+          {
+            role: 'system',
+            content: '你是一个专业的技术文档撰写者。你的任务是根据 GitHub 项目的 README 内容生成简洁、准确的中文摘要。摘要应该用中文编写，适合开发者快速了解项目的用途和特点。'
+          },
+          {
+            role: 'user',
+            content: prompt
+          }
+        ],
+        temperature: 0.7,
+        max_tokens: 300
+      });
+
+      // Extract the summary from the response
+      const summary = response.choices[0]?.message?.content || '';
+      return summary.trim();
+    } catch (error) {
+      console.error('Failed to generate AI summary from README:', error);
       return '';
     }
   }

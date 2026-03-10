@@ -47,47 +47,63 @@ export class GitHubFetcher {
     const $ = cheerio.load(html);
     const repositories: RepositoryInfo[] = [];
 
-    // Find all trending repositories (Box-row items)
-    $('.Box-row[data-trending] article.Box-row, .Box-row:not([data-trending])').each((_, element) => {
+    // Find all trending repositories using simple, reliable selector
+    $('article.Box-row').each((_, element) => {
       const $item = $(element);
 
-      // Extract repository name and URL
-      const $link = $item.find('h1lh-condensed a.link-plain.d-inline-block.text-bold, h1.h3.lh-condensed a.link-plain.d-inline-block.text-bold').first();
-      const $fullName = $item.find('h1.h3 lh-condensed a').first();
-
-      // Try different selector patterns for the link
-      const $repoLink = $item.find('h1.h3.lh-condensed a').first();
+      // Extract repository link - support both h1 and h2 (GitHub changed this)
+      const $repoLink = $item.find('h2.h3 a, h1.h3 a').first();
       const href = $repoLink.attr('href');
       if (!href) return;
 
       // Clean up href to get full URL
       let url = href.startsWith('http') ? href : `${this.BASE_URL}${href}`;
 
-      // Extract full name (owner/repo)
-      const fullName = href.replace('/', '').replace(/^\/+/, '');
+      // Extract full name (owner/repo) - clean up whitespace and slashes
+      const rawName = $repoLink.text();
+      const fullName = rawName.replace(/\s+/g, '').replace('/', '/');
 
-      // Extract name (last part of path)
+      // Extract name (repo name only)
       const name = href.split('/').pop() || '';
 
       // Description
-      const description = $item.find('p.col-9.text-gray.my-1.pr-4').text().trim();
+      const description = $item.find('p.col-9').text().trim();
 
-      // Star count - try multiple selectors
+      // Total Star count - try new format first, then fallback to old format
       let starCount = 0;
-      const starText = $item.find('span[aria-label="Star"]').first().text() ||
-                       $item.find('.d-inline-block.mr-3').first().find('span').first().text();
-      if (starText) {
+      const starLink = $item.find('a[href$="/stargazers"]');
+      if (starLink.length > 0) {
+        // New GitHub format: link to stargazers
+        const starText = starLink.text().trim();
         starCount = this.parseStarCount(starText);
+      } else {
+        // Old format: span with aria-label="Star"
+        const starText = $item.find('span[aria-label="Star"]').first().text() ||
+                         $item.find('.d-inline-block.mr-3').first().find('span').first().text();
+        if (starText) {
+          starCount = this.parseStarCount(starText);
+        }
       }
 
-      // Fork count
-      const forkText = $item.find('span[aria-label="Fork"]').first().text() ||
-                       $item.find('.d-inline-block.mr-3').eq(1).find('span').first().text();
-      const forkCount = this.parseStarCount(forkText);
+      // Fork count - try new format first, then fallback to old format
+      let forkCount = 0;
+      const forkLink = $item.find('a[href$="/forks"]');
+      if (forkLink.length > 0) {
+        // New GitHub format: link to forks
+        const forkText = forkLink.text().trim();
+        forkCount = this.parseStarCount(forkText);
+      } else {
+        // Old format: span with aria-label="Fork"
+        const forkText = $item.find('span[aria-label="Fork"]').first().text() ||
+                         $item.find('.d-inline-block.mr-3').eq(1).find('span').first().text();
+        if (forkText) {
+          forkCount = this.parseStarCount(forkText);
+        }
+      }
 
-      // Language
-      const language = $item.find('span.text-bold.mr-2').last().text().trim() ||
-                       $item.find('.f6.text-gray.mt-2 span.text-bold.mr-2').first().text().trim();
+      // Language - try itemprop first (real GitHub), then fallback (test fixtures)
+      const language = $item.find('span[itemprop="programmingLanguage"]').text().trim() ||
+                       $item.find('span.text-bold.mr-2').last().text().trim();
 
       repositories.push({
         name,
@@ -141,57 +157,42 @@ export class GitHubFetcher {
 
   /**
    * Fetch README content from a repository
+   * Tries multiple file names (README.md, README.rst, README.txt, README) and branches (main, master)
    * @param fullName Repository full name (owner/repo)
-   * @returns README content as string
+   * @returns README content as string, or empty string if not found
    */
   async fetchReadme(fullName: string): Promise<string> {
-    // Construct raw URL for README.md
-    const readmeUrl = `${this.RAW_URL}/${fullName}/main/README.md`;
+    const readmeFiles = ['README.md', 'README.rst', 'README.txt', 'README'];
+    const branches = ['main', 'master'];
 
-    try {
-      let response;
-      try {
-        response = await axios.get(readmeUrl, {
-          headers: {
-            'Accept': 'text/plain;charset=utf-8'
-          },
-          maxRedirects: 5
-        });
-      } catch (error) {
-        // If main branch returns 404, try getter branch
-        if (axios.isAxiosError(error) && error.response?.status === 404) {
-          const getterReadmeUrl = `${this.RAW_URL}/${fullName}/getter/README.md`;
-          try {
-            response = await axios.get(getterReadmeUrl, {
-              headers: {
-                'Accept': 'text/plain;charset=utf-8'
-              },
-              maxRedirects: 5
-            });
-          } catch (getterError) {
-            // Both branches failed
-            if (axios.isAxiosError(getterError) && getterError.response?.status === 404) {
-              return '';
-            }
-            throw new Error(`Failed to fetch README: ${getterError instanceof Error ? getterError.message : 'Unknown error'}`);
+    for (const readmeName of readmeFiles) {
+      for (const branch of branches) {
+        const readmeUrl = `${this.RAW_URL}/${fullName}/${branch}/${readmeName}`;
+
+        try {
+          const response = await axios.get(readmeUrl, {
+            headers: {
+              'Accept': 'text/plain;charset=utf-8'
+            },
+            timeout: 10000 // 10 second timeout
+          });
+
+          if (response.status === 200 && response.data) {
+            return response.data;
           }
-        } else {
-          throw error;
+        } catch (error) {
+          // Continue to next combination if this one fails
+          if (axios.isAxiosError(error) && error.response?.status === 404) {
+            continue;
+          }
+          // For other errors, log and continue
+          continue;
         }
       }
-
-      if (response && response.status === 200) {
-        return response.data || '';
-      }
-      return '';
-    } catch (error) {
-      if (axios.isAxiosError(error)) {
-        if (error.response && error.response.status === 404) {
-          return '';
-        }
-      }
-      throw new Error(`Failed to fetch README: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
+
+    // No README found in any combination
+    return '';
   }
 }
 

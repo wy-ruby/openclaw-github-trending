@@ -7,7 +7,8 @@ import { ConfigManager } from './core/config';
 import { RepositoryInfo } from './models/repository';
 import { GitHubTrendingParams, GitHubTrendingResult, PluginConfig, AIConfig, FeishuConfig, EmailConfig } from './models/config';
 import { PushResult } from './channels/types';
-import { OpenClawConfig, EmailConfig as InternalEmailConfig } from './core/config';
+import { OpenClawConfig, SMTPConfig } from './core/config';
+import { EmailConfig as EmailSendConfig } from './channels/email';
 
 /**
  * GitHub Trending Tool
@@ -24,10 +25,18 @@ export interface GitHubTrendingTool {
         enum: ['daily', 'weekly', 'monthly'];
         description: 'Time period for trending';
       };
-      channel: {
+      channels?: {
+        type: 'array';
+        items: {
+          type: string;
+          enum: ['feishu', 'email'];
+        };
+        description: 'Push channels (array: ["email"], ["feishu"], or ["email", "feishu"])';
+      };
+      channel?: {
         type: string;
         enum: ['feishu', 'email'];
-        description: 'Push channel: feishu or email';
+        description: 'Push channel (deprecated, use channels instead)';
       };
       email_to?: {
         type: string;
@@ -87,7 +96,22 @@ async function githubTrendingHandler(
   openclawConfig: OpenClawConfig = {},
   historyData?: any
 ): Promise<GitHubTrendingResult> {
-  const { since, channel, email_to, feishu_webhook } = params;
+  const { since, channel, channels, email_to, feishu_webhook } = params;
+
+  // 解析通道配置（向后兼容单个 channel 参数）
+  const targetChannels: ('feishu' | 'email')[] = channels || (channel ? [channel] : []);
+  if (targetChannels.length === 0) {
+    return {
+      success: false,
+      pushed_count: 0,
+      new_count: 0,
+      seen_count: 0,
+      total_count: 0,
+      pushed_to: '',
+      timestamp: new Date().toISOString(),
+      message: '请指定至少一个推送通道：channels 参数（推荐）或 channel 参数（已废弃）'
+    };
+  }
 
   // Step 1: Resolve AI configuration with fallback logic
   const aiConfig = ConfigManager.getAIConfig(pluginConfig, openclawConfig);
@@ -106,7 +130,7 @@ async function githubTrendingHandler(
       new_count: 0,
       seen_count: 0,
       total_count: 0,
-      pushed_to: channel,
+      pushed_to: targetChannels.join(','),
       timestamp: new Date().toISOString(),
       message: `Failed to fetch trending: ${error instanceof Error ? error.message : 'Unknown error'}`
     };
@@ -146,95 +170,103 @@ async function githubTrendingHandler(
     ai_summary: historyManager.getProject(r.full_name)?.ai_summary || ''
   }));
 
-  // Step 5: Build push content based on channel
-  let pushResult: PushResult;
+  // Step 5: Push to each channel
+  const pushResults: { channel: string; success: boolean; messageId?: string; error?: string }[] = [];
 
-  if (channel === 'feishu') {
-    const webhookUrl = feishu_webhook || pluginConfig?.channels?.feishu?.webhook_url;
-    if (!webhookUrl) {
-      return {
-        success: false,
-        pushed_count: 0,
-        new_count: newlySeen.length,
-        seen_count: alreadySeen.length,
-        total_count: repositories.length,
-        pushed_to: 'feishu',
-        timestamp: new Date().toISOString(),
-        message: 'Feishu webhook URL not provided'
-      };
-    }
-
-    pushResult = await FeishuChannel.push(webhookUrl, processedRepositories, seenReposWithSummary);
-  } else if (channel === 'email') {
-    const emailTo = email_to || pluginConfig?.channels?.email?.sender;
-    if (!emailTo) {
-      return {
-        success: false,
-        pushed_count: 0,
-        new_count: newlySeen.length,
-        seen_count: alreadySeen.length,
-        total_count: repositories.length,
-        pushed_to: 'email',
-        timestamp: new Date().toISOString(),
-        message: 'Email recipient not provided'
-      };
-    }
-
-    // Detect email configuration
-    const emailConfig = ConfigManager.detectEmailConfig(emailTo, pluginConfig?.channels?.email?.password || '');
-    const internalEmailConfig: EmailChannelEmailConfig = {
-      from: emailConfig.sender,
-      to: emailTo,
-      subject: `GitHub Trending ${since === 'daily' ? 'Daily' : since === 'weekly' ? 'Weekly' : 'Monthly'}`,
-      smtp: {
-        host: emailConfig.smtp_host,
-        port: emailConfig.smtp_port,
-        secure: false, // Use STARTTLS
-        auth: {
-          user: emailConfig.sender,
-          pass: emailConfig.password
+  for (const targetChannel of targetChannels) {
+    try {
+      if (targetChannel === 'feishu') {
+        const webhookUrl = feishu_webhook || pluginConfig?.channels?.feishu?.webhook_url;
+        if (!webhookUrl) {
+          pushResults.push({ channel: 'feishu', success: false, error: 'Feishu webhook URL not provided' });
+          continue;
         }
-      }
-    };
 
-    pushResult = await EmailChannel.send(internalEmailConfig, processedRepositories, seenReposWithSummary);
-  } else {
-    return {
-      success: false,
-      pushed_count: 0,
-      new_count: 0,
-      seen_count: 0,
-      total_count: repositories.length,
-      pushed_to: channel,
-      timestamp: new Date().toISOString(),
-      message: `Invalid channel: ${channel}`
-    };
+        const result = await FeishuChannel.push(webhookUrl, processedRepositories, seenReposWithSummary);
+        pushResults.push({
+          channel: 'feishu',
+          success: result.success,
+          messageId: result.messageId,
+          error: result.error
+        });
+      } else if (targetChannel === 'email') {
+        const emailTo = email_to || pluginConfig?.channels?.email?.sender;
+        if (!emailTo) {
+          pushResults.push({ channel: 'email', success: false, error: 'Email recipient not provided' });
+          continue;
+        }
+
+        // Detect email configuration
+        const emailConfig = ConfigManager.getEmailConfig(
+          emailTo,
+          pluginConfig?.channels?.email?.password || '',
+          pluginConfig?.channels?.email
+        );
+        const internalEmailConfig: EmailSendConfig = {
+          from: emailConfig.sender,
+          to: emailTo,
+          subject: `GitHub Trending ${since === 'daily' ? 'Daily' : since === 'weekly' ? 'Weekly' : 'Monthly'}`,
+          smtp: {
+            host: emailConfig.smtp_host,
+            port: emailConfig.smtp_port,
+            secure: false, // Use STARTTLS
+            auth: {
+              user: emailConfig.sender,
+              pass: emailConfig.password
+            }
+          }
+        };
+
+        const result = await EmailChannel.send(internalEmailConfig, processedRepositories, seenReposWithSummary, since);
+        pushResults.push({
+          channel: 'email',
+          success: result.success,
+          messageId: result.messageId,
+          error: result.error
+        });
+      }
+    } catch (error) {
+      pushResults.push({
+        channel: targetChannel,
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
   }
 
   // Step 6: Return result
-  if (pushResult.success) {
-    return {
-      success: true,
-      pushed_count: processedRepositories.length,
-      new_count: newlySeen.length,
-      seen_count: alreadySeen.length,
-      total_count: repositories.length,
-      pushed_to: channel,
-      timestamp: new Date().toISOString(),
-      message: pushResult.msg || (pushResult.messageId ? `Email sent: ${pushResult.messageId}` : 'Pushed successfully')
-    };
+  const successCount = pushResults.filter(r => r.success).length;
+  const failedChannels = pushResults.filter(r => !r.success).map(r => r.channel);
+  const successChannels = pushResults.filter(r => r.success).map(r => r.channel);
+
+  // 构建详细的消息
+  let message = '';
+  if (successCount === targetChannels.length) {
+    message = `成功推送到所有 ${successCount} 个通道`;
+  } else if (successCount > 0) {
+    const failedDetails = pushResults
+      .filter(r => !r.success)
+      .map(r => `${r.channel}: ${r.error}`)
+      .join(', ');
+    message = `部分成功：${successCount}/${targetChannels.length} 个通道推送成功，失败：${failedDetails}`;
   } else {
-    return {
-      success: false,
-      pushed_count: processedRepositories.length,
-      new_count: newlySeen.length,
-      seen_count: alreadySeen.length,
-      total_count: repositories.length,
-      pushed_to: channel,
-      timestamp: new Date().toISOString(),
-      message: pushResult.error || `Push failed with code: ${pushResult.code}`
-    };
+    const failedDetails = pushResults
+      .filter(r => !r.success)
+      .map(r => `${r.channel}: ${r.error}`)
+      .join(', ');
+    message = `所有通道推送失败：${failedDetails}`;
   }
+
+  return {
+    success: successCount > 0,
+    pushed_count: processedRepositories.length,
+    new_count: newlySeen.length,
+    seen_count: alreadySeen.length,
+    total_count: repositories.length,
+    pushed_to: successChannels.join(','),
+    timestamp: new Date().toISOString(),
+    message
+  };
 }
 
 /**
@@ -251,10 +283,18 @@ export const githubTrendingTool: GitHubTrendingTool = {
         enum: ['daily', 'weekly', 'monthly'],
         description: 'Time period for trending'
       },
+      channels: {
+        type: 'array',
+        items: {
+          type: 'string',
+          enum: ['feishu', 'email']
+        },
+        description: 'Push channels (array: ["email"], ["feishu"], or ["email", "feishu"])'
+      },
       channel: {
         type: 'string',
         enum: ['feishu', 'email'],
-        description: 'Push channel: feishu or email'
+        description: 'Push channel (deprecated, use channels instead)'
       },
       email_to: {
         type: 'string',
@@ -266,25 +306,9 @@ export const githubTrendingTool: GitHubTrendingTool = {
         description: 'Feishu webhook URL (required for feishu channel)'
       }
     },
-    required: ['since', 'channel']
+    required: ['since']
   },
   handler: githubTrendingHandler
 };
 
 export default githubTrendingTool;
-
-// Internal type for EmailChannel email config
-interface EmailChannelEmailConfig {
-  from: string;
-  to: string;
-  subject: string;
-  smtp: {
-    host: string;
-    port: number;
-    secure: boolean;
-    auth: {
-      user: string;
-      pass: string;
-    };
-  };
-}

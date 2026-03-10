@@ -192,7 +192,7 @@ describe('githubTrendingTool', () => {
         expect(result.new_count).toBe(2);
         expect(result.seen_count).toBe(0);
         expect(result.pushed_to).toBe('feishu');
-        expect(result.message).toContain('success');
+        expect(result.message).toContain('成功推送');
 
         // Verify GitHubFetcher was called
         expect(mockFetchTrending).toHaveBeenCalledWith('daily');
@@ -299,7 +299,7 @@ describe('githubTrendingTool', () => {
         });
 
         // Mock the email config detection
-        const detectSpy = jest.spyOn(require('../src/core/config').ConfigManager, 'detectEmailConfig');
+        const detectSpy = jest.spyOn(require('../src/core/config').ConfigManager, 'getEmailConfig');
         detectSpy.mockReturnValue({
           smtp_host: 'smtp.gmail.com',
           smtp_port: 587,
@@ -354,7 +354,7 @@ describe('githubTrendingTool', () => {
         mockGenerateSummary.mockResolvedValue('');
 
         // Mock the email config detection
-        const spy = jest.spyOn(require('../src/core/config').ConfigManager, 'detectEmailConfig');
+        const spy = jest.spyOn(require('../src/core/config').ConfigManager, 'getEmailConfig');
         spy.mockReturnValue({
           smtp_host: 'smtp.gmail.com',
           smtp_port: 587,
@@ -370,6 +370,147 @@ describe('githubTrendingTool', () => {
         expect(result.message).toContain('SMTP error');
 
         spy.mockRestore();
+      });
+    });
+
+    describe('multi-channel support', () => {
+      it('should push to both email and feishu when channels array provided', async () => {
+        const multiChannelParams: GitHubTrendingParams = {
+          since: 'daily',
+          channels: ['email', 'feishu'],
+          email_to: 'user@example.com',
+          feishu_webhook: 'https://open.feishu.cn/open-apis/bot/v2/hook/test'
+        };
+
+        (EmailChannel.send as jest.Mock).mockResolvedValue({
+          success: true,
+          messageId: 'test-message-id'
+        });
+        (FeishuChannel.push as jest.Mock).mockResolvedValue({
+          success: true,
+          msg: 'success'
+        });
+        mockFetchTrending.mockResolvedValue(mockRepositories);
+        mockGenerateSummary.mockResolvedValue('');
+
+        const spy = jest.spyOn(require('../src/core/config').ConfigManager, 'getEmailConfig');
+        spy.mockReturnValue({
+          smtp_host: 'smtp.gmail.com',
+          smtp_port: 587,
+          use_tls: true,
+          sender: 'user@example.com',
+          password: 'password',
+          from_name: 'GitHub Trending'
+        });
+
+        const result = await toolModule.githubTrendingTool.handler(multiChannelParams, {}, {}, undefined);
+
+        expect(result.success).toBe(true);
+        expect(result.message).toContain('成功推送到所有 2 个通道');
+        expect(EmailChannel.send).toHaveBeenCalled();
+        expect(FeishuChannel.push).toHaveBeenCalled();
+
+        spy.mockRestore();
+      });
+
+      it('should handle partial failure when one channel fails', async () => {
+        const multiChannelParams: GitHubTrendingParams = {
+          since: 'daily',
+          channels: ['email', 'feishu'],
+          email_to: 'user@example.com',
+          feishu_webhook: 'https://open.feishu.cn/open-apis/bot/v2/hook/test'
+        };
+
+        (EmailChannel.send as jest.Mock).mockResolvedValue({
+          success: false,
+          error: 'SMTP error'
+        });
+        (FeishuChannel.push as jest.Mock).mockResolvedValue({
+          success: true,
+          msg: 'success'
+        });
+        mockFetchTrending.mockResolvedValue(mockRepositories);
+        mockGenerateSummary.mockResolvedValue('');
+
+        const spy = jest.spyOn(require('../src/core/config').ConfigManager, 'getEmailConfig');
+        spy.mockReturnValue({
+          smtp_host: 'smtp.gmail.com',
+          smtp_port: 587,
+          use_tls: true,
+          sender: 'user@example.com',
+          password: 'password',
+          from_name: 'GitHub Trending'
+        });
+
+        const result = await toolModule.githubTrendingTool.handler(multiChannelParams, {}, {}, undefined);
+
+        expect(result.success).toBe(true); // One channel succeeded
+        expect(result.message).toContain('部分成功');
+        expect(result.message).toContain('1/2');
+        expect(result.message).toContain('email');
+
+        spy.mockRestore();
+      });
+
+      it('should handle all channels failure', async () => {
+        const multiChannelParams: GitHubTrendingParams = {
+          since: 'daily',
+          channels: ['email', 'feishu'],
+          email_to: 'user@example.com',
+          feishu_webhook: 'https://open.feishu.cn/open-apis/bot/v2/hook/test'
+        };
+
+        (EmailChannel.send as jest.Mock).mockResolvedValue({
+          success: false,
+          error: 'SMTP error'
+        });
+        (FeishuChannel.push as jest.Mock).mockResolvedValue({
+          success: false,
+          error: 'Webhook error'
+        });
+        mockFetchTrending.mockResolvedValue(mockRepositories);
+        mockGenerateSummary.mockResolvedValue('');
+
+        const spy = jest.spyOn(require('../src/core/config').ConfigManager, 'getEmailConfig');
+        spy.mockReturnValue({
+          smtp_host: 'smtp.gmail.com',
+          smtp_port: 587,
+          use_tls: true,
+          sender: 'user@example.com',
+          password: 'password',
+          from_name: 'GitHub Trending'
+        });
+
+        const result = await toolModule.githubTrendingTool.handler(multiChannelParams, {}, {}, undefined);
+
+        expect(result.success).toBe(false);
+        expect(result.message).toContain('所有通道推送失败');
+
+        spy.mockRestore();
+      });
+
+      it('should maintain backward compatibility with single channel parameter', async () => {
+        // 清理之前的 mock 调用
+        jest.clearAllMocks();
+
+        const singleChannelParams: GitHubTrendingParams = {
+          since: 'daily',
+          channel: 'feishu',
+          feishu_webhook: 'https://open.feishu.cn/open-apis/bot/v2/hook/test'
+        };
+
+        (FeishuChannel.push as jest.Mock).mockResolvedValue({
+          success: true,
+          msg: 'success'
+        });
+        mockFetchTrending.mockResolvedValue(mockRepositories);
+        mockGenerateSummary.mockResolvedValue('');
+
+        const result = await toolModule.githubTrendingTool.handler(singleChannelParams, {}, {}, undefined);
+
+        expect(result.success).toBe(true);
+        expect(result.pushed_to).toBe('feishu');
+        expect(FeishuChannel.push).toHaveBeenCalledTimes(1);
       });
     });
 

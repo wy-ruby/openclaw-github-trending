@@ -34,32 +34,55 @@ export class FeishuChannel {
       weekday: 'long'
     });
 
-    const title = `GitHub Trending - ${dateStr}`;
-
-    // Build new repositories section
-    const newReposSection = FeishuChannel.buildRepositoriesSection(
-      '🔥 新上榜项目',
-      newRepositories,
-      'waph'
-    );
-
-    // Build seen repositories section (pinned/constant榜)
-    const seenReposSection = FeishuChannel.buildRepositoriesSection(
-      '⭐ 持续霸榜项目',
-      seenRepositories,
-      'gray'
-    );
+    const title = `GitHub 热榜推送 - ${dateStr}`;
 
     const elements: any[] = [];
 
     // Add new repositories section if has new repos
     if (newRepositories.length > 0) {
-      elements.push(newReposSection);
+      elements.push({
+        tag: 'div',
+        text: {
+          content: '**🔥 新上榜项目**',
+          tag: 'lark_md'
+        }
+      });
+      elements.push({
+        tag: 'hr',
+        dir: 'horizontal'
+      });
+      newRepositories.forEach((repo, index) => {
+        elements.push(FeishuChannel.buildRepoElement(repo, index, true));
+      });
     }
 
     // Add seen repositories section if has seen repos
     if (seenRepositories.length > 0) {
-      elements.push(seenReposSection);
+      // Add spacing between sections
+      if (newRepositories.length > 0) {
+        elements.push({
+          tag: 'div',
+          text: {
+            content: ' ',
+            tag: 'lark_md'
+          }
+        });
+      }
+
+      elements.push({
+        tag: 'div',
+        text: {
+          content: '**⭐ 持续霸榜项目**',
+          tag: 'lark_md'
+        }
+      });
+      elements.push({
+        tag: 'hr',
+        dir: 'horizontal'
+      });
+      seenRepositories.forEach((repo, index) => {
+        elements.push(FeishuChannel.buildRepoElement(repo, index, false));
+      });
     }
 
     // If no repositories, show message
@@ -82,53 +105,8 @@ export class FeishuChannel {
           tag: 'plain_text',
           content: title
         },
-        template: 'waph'
+        template: 'blue'
       },
-      elements: elements
-    };
-  }
-
-  /**
-   * Build a section for repositories list
-   * @param title Section title
-   * @param repositories Array of repositories
-   * @param template Card template color
-   * @returns Feishu card section element
-   */
-  static buildRepositoriesSection(
-    title: string,
-    repositories: RepositoryInfo[],
-    template: string
-  ): any {
-    const elements: any[] = [
-      {
-        tag: 'div',
-        text: {
-          content: title,
-          tag: 'lark_md'
-        },
-        extra: {
-          tag: 'icon',
-          icon_type: 'highlight',
-          tips: title
-        }
-      }
-    ];
-
-    // Add separator line
-    elements.push({
-      tag: 'hr',
-      dir: 'horizontal'
-    });
-
-    // Build repository cards
-    repositories.forEach((repo, index) => {
-      const repoElement = FeishuChannel.buildRepoElement(repo, index);
-      elements.push(repoElement);
-    });
-
-    return {
-      tag: 'div',
       elements: elements
     };
   }
@@ -137,28 +115,42 @@ export class FeishuChannel {
    * Build a single repository card element
    * @param repo Repository information
    * @param index Index of repository
+   * @param isNew Whether this is a new repository
    * @returns Feishu card element
    */
-  static buildRepoElement(repo: RepositoryInfo, index: number): any {
+  static buildRepoElement(repo: RepositoryInfo, index: number, isNew: boolean): any {
     const starText = FeishuChannel.formatNumberWithK(repo.stars);
     const forkText = repo.forks ? ` · ${FeishuChannel.formatNumberWithK(repo.forks)} Forks` : '';
     const languageBadge = repo.language
       ? ` <badge text="${repo.language}" bg_color="${FeishuChannel.getLanguageColor(repo.language)}"/>`
       : '';
 
+    // 新上榜项目：显示完整 AI 摘要
+    // 持续霸榜项目：显示简化摘要（一句话）
+    const aiSummaryText = isNew
+      ? (repo.ai_summary
+          ? `\n\n**🤖 AI 摘要：**\n${FeishuChannel.escapeMarkdown(repo.ai_summary)}`
+          : '')
+      : (repo.ai_summary
+          ? `\n\n_${repo.ai_summary.split('。')[0]}。_`
+          : '');
+
+    // 仓库名称加粗，更醒目
+    const repoName = `**${repo.full_name}**`;
+
     return {
       tag: 'div',
       text: {
-        content: `<font color="${FeishuChannel.getStarColor(repo.stars)}">🌟 ${starText}</font>${forkText}${languageBadge}\n${FeishuChannel.escapeMarkdown(repo.description)}`,
+        content: `${repoName}\n<font color="${FeishuChannel.getStarColor(repo.stars)}">🌟 ${starText}</font>${forkText}${languageBadge}\n\n${FeishuChannel.escapeMarkdown(repo.description)}${aiSummaryText}`,
         tag: 'lark_md'
       },
       extra: {
         tag: 'button',
         text: {
-          content: '👀 查看',
+          content: '查看详情',
           tag: 'lark_md'
         },
-        type: 'primary',
+        type: isNew ? 'primary' : 'default',
         value: {
           url: repo.url
         }
@@ -221,13 +213,26 @@ export class FeishuChannel {
   }
 
   /**
-   * Escape markdown characters in text
+   * Escape markdown characters in text for Feishu lark_md
    * @param text Markdown text
    * @returns Escaped text
    */
   static escapeMarkdown(text: string): string {
-    // Replace newlines with space for card display
-    return text.replace(/\n/g, ' ');
+    return text
+      // 转义 HTML 特殊字符
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      // 转义 Markdown 特殊字符
+      .replace(/\*/g, '\\*')      // 粗体
+      .replace(/_/g, '\\_')       // 斜体
+      .replace(/`/g, '\\`')       // 代码
+      .replace(/\[/g, '\\[')      // 链接
+      .replace(/\]/g, '\\]')
+      .replace(/\(/g, '\\(')
+      .replace(/\)/g, '\\)')
+      // 将换行符替换为空格（飞书卡片不支持多行）
+      .replace(/\n/g, ' ');
   }
 
   /**

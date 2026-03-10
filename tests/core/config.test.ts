@@ -48,13 +48,13 @@ describe('ConfigManager', () => {
 
       expect(result.apiKey).toBe('');
       expect(result.baseUrl).toBe('https://api.openai.com/v1');
-      expect(result.model).toBe('gpt-4');
+      expect(result.model).toBe('gpt-4o-mini');
     });
   });
 
-  describe('detectEmailConfig', () => {
+  describe('getEmailConfig', () => {
     it('should detect QQ email config', () => {
-      const result = ConfigManager.detectEmailConfig('test@qq.com', 'password');
+      const result = ConfigManager.getEmailConfig('test@qq.com', 'password');
 
       expect(result.smtp_host).toBe('smtp.qq.com');
       expect(result.smtp_port).toBe(587);
@@ -65,7 +65,7 @@ describe('ConfigManager', () => {
     });
 
     it('should detect 163 email config', () => {
-      const result = ConfigManager.detectEmailConfig('test@163.com', 'password');
+      const result = ConfigManager.getEmailConfig('test@163.com', 'password');
 
       expect(result.smtp_host).toBe('smtp.163.com');
       expect(result.smtp_port).toBe(587);
@@ -73,7 +73,7 @@ describe('ConfigManager', () => {
     });
 
     it('should detect Gmail config', () => {
-      const result = ConfigManager.detectEmailConfig('test@gmail.com', 'password');
+      const result = ConfigManager.getEmailConfig('test@gmail.com', 'password');
 
       expect(result.smtp_host).toBe('smtp.gmail.com');
       expect(result.smtp_port).toBe(587);
@@ -81,7 +81,7 @@ describe('ConfigManager', () => {
     });
 
     it('should detect Aliyun email config', () => {
-      const result = ConfigManager.detectEmailConfig('test@aliyun.com', 'password');
+      const result = ConfigManager.getEmailConfig('test@aliyun.com', 'password');
 
       expect(result.smtp_host).toBe('smtp.aliyun.com');
       expect(result.smtp_port).toBe(587);
@@ -89,7 +89,7 @@ describe('ConfigManager', () => {
     });
 
     it('should fallback to QQ config for unknown domain', () => {
-      const result = ConfigManager.detectEmailConfig('test@unknown.com', 'password');
+      const result = ConfigManager.getEmailConfig('test@unknown.com', 'password');
 
       expect(result.smtp_host).toBe('smtp.qq.com');
     });
