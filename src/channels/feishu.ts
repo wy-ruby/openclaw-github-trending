@@ -1,31 +1,23 @@
 import axios from 'axios';
 import { RepositoryInfo } from '../models/repository';
-import { FeishuCard, PushResult } from './types';
+import { PushResult } from './types';
 
 /**
  * Feishu Channel for pushing GitHub trending repositories
  */
 export class FeishuChannel {
-  private webhookUrl: string;
-
   /**
-   * Create a Feishu channel instance
-   * @param webhookUrl Feishu webhook URL
-   */
-  constructor(webhookUrl: string) {
-    this.webhookUrl = webhookUrl;
-  }
-
-  /**
-   * Build a Feishu rich text card for repositories
+   * Build Feishu card message
    * @param newRepositories Array of new repositories to display
    * @param seenRepositories Array of seen repositories to display
+   * @param since Time period for trending
    * @returns Feishu card object
    */
   static buildCard(
     newRepositories: RepositoryInfo[],
-    seenRepositories: RepositoryInfo[]
-  ): FeishuCard {
+    seenRepositories: RepositoryInfo[],
+    since: 'daily' | 'weekly' | 'monthly' = 'monthly'
+  ): any {
     const currentDate = new Date();
     const dateStr = currentDate.toLocaleDateString('zh-CN', {
       year: 'numeric',
@@ -34,11 +26,11 @@ export class FeishuChannel {
       weekday: 'long'
     });
 
-    const title = `GitHub 热榜推送 - ${dateStr}`;
+    const sinceText = since === 'daily' ? '当天' : since === 'weekly' ? '本周' : '本月';
 
     const elements: any[] = [];
 
-    // Add new repositories section if has new repos
+    // 新上榜项目
     if (newRepositories.length > 0) {
       elements.push({
         tag: 'div',
@@ -47,18 +39,23 @@ export class FeishuChannel {
           tag: 'lark_md'
         }
       });
+
       elements.push({
-        tag: 'hr',
-        dir: 'horizontal'
+        tag: 'hr'
       });
+
       newRepositories.forEach((repo, index) => {
-        elements.push(FeishuChannel.buildRepoElement(repo, index, true));
+        const repoElements = FeishuChannel.buildRepoElement(repo, index, true);
+        // 如果是最后一个项目，移除分割线
+        if (index === newRepositories.length - 1) {
+          repoElements.pop();
+        }
+        elements.push(...repoElements);
       });
     }
 
-    // Add seen repositories section if has seen repos
+    // 持续霸榜项目
     if (seenRepositories.length > 0) {
-      // Add spacing between sections
       if (newRepositories.length > 0) {
         elements.push({
           tag: 'div',
@@ -76,17 +73,23 @@ export class FeishuChannel {
           tag: 'lark_md'
         }
       });
+
       elements.push({
-        tag: 'hr',
-        dir: 'horizontal'
+        tag: 'hr'
       });
+
       seenRepositories.forEach((repo, index) => {
-        elements.push(FeishuChannel.buildRepoElement(repo, index, false));
+        const repoElements = FeishuChannel.buildRepoElement(repo, index, false);
+        // 如果是最后一个项目，移除分割线
+        if (index === seenRepositories.length - 1) {
+          repoElements.pop();
+        }
+        elements.push(...repoElements);
       });
     }
 
-    // If no repositories, show message
-    if (elements.length === 0) {
+    // 如果没有项目
+    if (newRepositories.length === 0 && seenRepositories.length === 0) {
       elements.push({
         tag: 'div',
         text: {
@@ -103,7 +106,7 @@ export class FeishuChannel {
       header: {
         title: {
           tag: 'plain_text',
-          content: title
+          content: `GitHub ${sinceText}热榜推送`
         },
         template: 'blue'
       },
@@ -116,70 +119,90 @@ export class FeishuChannel {
    * @param repo Repository information
    * @param index Index of repository
    * @param isNew Whether this is a new repository
-   * @returns Feishu card element
+   * @returns Feishu card element array
    */
-  static buildRepoElement(repo: RepositoryInfo, index: number, isNew: boolean): any {
-    const starText = FeishuChannel.formatNumberWithK(repo.stars);
-    const forkText = repo.forks ? ` · ${FeishuChannel.formatNumberWithK(repo.forks)} Forks` : '';
-    const languageBadge = repo.language
-      ? ` <badge text="${repo.language}" bg_color="${FeishuChannel.getLanguageColor(repo.language)}"/>`
+  static buildRepoElement(repo: RepositoryInfo, index: number, isNew: boolean): any[] {
+    const formattedStars = FeishuChannel.formatNumberWithK(repo.stars);
+    const formattedForks = repo.forks
+      ? ` ⚡${FeishuChannel.formatNumberWithK(repo.forks)}`
       : '';
 
-    // 新上榜项目：显示完整 AI 摘要
-    // 持续霸榜项目：显示简化摘要（一句话）
-    const aiSummaryText = isNew
+    // 语言显示：emoji + 语言名
+    const languageText = repo.language
+      ? ` ${FeishuChannel.getLanguageEmoji(repo.language)} ${repo.language}`
+      : '';
+
+    // 项目基本信息
+    const repoInfo = `**${index + 1}. [${repo.full_name}](${repo.url})**\n★${formattedStars}${formattedForks}${languageText}`;
+
+    // 新上榜项目：显示完整项目介绍
+    // 持续霸榜项目：显示简化介绍
+    const summaryText = isNew
       ? (repo.ai_summary
-          ? `\n\n**🤖 AI 摘要：**\n${FeishuChannel.escapeMarkdown(repo.ai_summary)}`
+          ? `\n\n**🤖 项目介绍：**\n${repo.ai_summary}`
           : '')
       : (repo.ai_summary
-          ? `\n\n_${repo.ai_summary.split('。')[0]}。_`
+          ? `\n\n${repo.ai_summary.split('。')[0]}。`
           : '');
 
-    // 仓库名称加粗，更醒目
-    const repoName = `**${repo.full_name}**`;
+    const elements: any[] = [];
 
-    return {
+    // 项目内容
+    elements.push({
       tag: 'div',
       text: {
-        content: `${repoName}\n<font color="${FeishuChannel.getStarColor(repo.stars)}">🌟 ${starText}</font>${forkText}${languageBadge}\n\n${FeishuChannel.escapeMarkdown(repo.description)}${aiSummaryText}`,
+        content: `${repoInfo}${summaryText}`,
         tag: 'lark_md'
-      },
-      extra: {
-        tag: 'button',
-        text: {
-          content: '查看详情',
-          tag: 'lark_md'
-        },
-        type: isNew ? 'primary' : 'default',
-        value: {
-          url: repo.url
-        }
       }
+    });
+
+    // 项目分割线（最后一个项目不加）
+    elements.push({
+      tag: 'hr'
+    });
+
+    return elements;
+  }
+
+  /**
+   * Get emoji icon for programming language
+   * @param language Programming language
+   * @returns Emoji icon
+   */
+  static getLanguageEmoji(language: string): string {
+    const emojis: Record<string, string> = {
+      JavaScript: '💻',
+      TypeScript: '💻',
+      Python: '🐍',
+      Ruby: '💎',
+      Java: '☕',
+      Go: '🐹',
+      Rust: '🦀',
+      Swift: '🍎',
+      C: '⚙️',
+      'C++': '⚙️',
+      'C#': '🎮',
+      PHP: '🐘',
+      HTML: '🌐',
+      CSS: '🎨',
+      Shell: '🐚',
+      SQL: '🗃️',
+      Kotlin: '🦾',
+      Dart: '🎯',
+      Vue: '💚',
+      React: '⚛️',
+      Angular: '🅰️',
+      Node: '💚',
+      Scala: '🔴',
+      Elixir: '💧',
+      Haskell: 'λ',
+      Lua: '🌙',
+      R: '📊',
+      MATLAB: '🔢',
+      Julia: '💜'
     };
-  }
 
-  /**
-   * Format number with 'k' suffix for thousands
-   * @param num Number to format
-   * @returns Formatted string
-   */
-  static formatNumberWithK(num: number): string {
-    if (num >= 1000) {
-      return (num / 1000).toFixed(1) + 'k';
-    }
-    return num.toString();
-  }
-
-  /**
-   * Get color based on star count
-   * @param stars Number of stars
-   * @returns Color code
-   */
-  static getStarColor(stars: number): string {
-    if (stars >= 10000) return 'red';
-    if (stars >= 5000) return 'orange';
-    if (stars >= 1000) return 'blue';
-    return 'gray';
+    return emojis[language] || '📝';
   }
 
   /**
@@ -206,33 +229,33 @@ export class FeishuChannel {
       Shell: '#89e051',
       SQL: '#e38c00',
       Kotlin: '#A97BFF',
-      Dart: '#00B4AB'
+      Dart: '#00B4AB',
+      Vue: '#41b883',
+      React: '#61dafb',
+      Angular: '#dd1b16',
+      Node: '#68a063',
+      Scala: '#c22d40',
+      Elixir: '#6e4a7e',
+      Haskell: '#5e5086',
+      Lua: '#000080',
+      R: '#198ce7',
+      MATLAB: '#e16737',
+      Julia: '#a270ba'
     };
 
     return colors[language] || '#666666';
   }
 
   /**
-   * Escape markdown characters in text for Feishu lark_md
-   * @param text Markdown text
-   * @returns Escaped text
+   * Format number with 'k' suffix for thousands
+   * @param num Number to format
+   * @returns Formatted string
    */
-  static escapeMarkdown(text: string): string {
-    return text
-      // 转义 HTML 特殊字符
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      // 转义 Markdown 特殊字符
-      .replace(/\*/g, '\\*')      // 粗体
-      .replace(/_/g, '\\_')       // 斜体
-      .replace(/`/g, '\\`')       // 代码
-      .replace(/\[/g, '\\[')      // 链接
-      .replace(/\]/g, '\\]')
-      .replace(/\(/g, '\\(')
-      .replace(/\)/g, '\\)')
-      // 将换行符替换为空格（飞书卡片不支持多行）
-      .replace(/\n/g, ' ');
+  static formatNumberWithK(num: number): string {
+    if (num >= 1000) {
+      return (num / 1000).toFixed(1) + 'k';
+    }
+    return num.toString();
   }
 
   /**
@@ -244,12 +267,19 @@ export class FeishuChannel {
   static async push(
     webhookUrl: string,
     newRepositories: RepositoryInfo[],
-    seenRepositories: RepositoryInfo[]
+    seenRepositories: RepositoryInfo[],
+    since: 'daily' | 'weekly' | 'monthly' = 'monthly'
   ): Promise<PushResult> {
-    const card = FeishuChannel.buildCard(newRepositories, seenRepositories);
+    const card = FeishuChannel.buildCard(newRepositories, seenRepositories, since);
+
+    // 飞书卡片消息格式
+    const message = {
+      msg_type: 'interactive',
+      card: card
+    };
 
     try {
-      const response = await axios.post(webhookUrl, card, {
+      const response = await axios.post(webhookUrl, message, {
         headers: {
           'Content-Type': 'application/json'
         }

@@ -70,29 +70,46 @@ export default function (api: any) {
 
         logger.info(`Found ${repositories.length} repos, ${shouldPush.length} to push`);
 
-        // 5. Generate AI summaries for repos to push
+        // 5. Generate AI summaries for repos to push (with concurrency control)
         const summarizer = new AISummarizer(aiConfig);
+        const maxWorkers = ConfigManager.getMaxWorkers(pluginConfig);
         const reposWithSummary: RepositoryInfo[] = [];
 
-        for (const repo of shouldPush) {
-          try {
-            logger.info(`Fetching README for ${repo.full_name}...`);
-            const readmeContent = await fetcher.fetchReadme(repo.full_name);
+        logger.info(`Generating AI summaries with ${maxWorkers} workers...`);
 
-            let summary = '';
+        // Process repositories in batches with concurrency control
+        for (let i = 0; i < shouldPush.length; i += maxWorkers) {
+          const batch = shouldPush.slice(i, i + maxWorkers);
 
-            if (readmeContent) {
-              logger.info(`README found for ${repo.full_name}, generating summary from README...`);
-              summary = await summarizer.summarizeReadme(repo.full_name, readmeContent);
-            } else {
-              logger.info(`No README found for ${repo.full_name}, using repository metadata...`);
-              summary = await summarizer.generateSummary(repo);
+          const batchResults = await Promise.allSettled(
+            batch.map(async (repo) => {
+              try {
+                logger.info(`Fetching README for ${repo.full_name}...`);
+                const readmeContent = await fetcher.fetchReadme(repo.full_name);
+
+                let summary = '';
+
+                if (readmeContent) {
+                  logger.info(`README found for ${repo.full_name}, generating summary from README...`);
+                  summary = await summarizer.summarizeReadme(repo.full_name, readmeContent);
+                } else {
+                  logger.info(`No README found for ${repo.full_name}, using repository metadata...`);
+                  summary = await summarizer.generateSummary(repo);
+                }
+
+                return { ...repo, ai_summary: summary };
+              } catch (error) {
+                logger.warn(`Failed to generate summary for ${repo.full_name}: ${error}`);
+                return { ...repo, ai_summary: '' };
+              }
+            })
+          );
+
+          // Collect results from this batch
+          for (const result of batchResults) {
+            if (result.status === 'fulfilled') {
+              reposWithSummary.push(result.value);
             }
-
-            reposWithSummary.push({ ...repo, ai_summary: summary });
-          } catch (error) {
-            logger.warn(`Failed to generate summary for ${repo.full_name}: ${error}`);
-            reposWithSummary.push({ ...repo, ai_summary: '' });
           }
         }
 
@@ -115,7 +132,7 @@ export default function (api: any) {
               }
 
               logger.info(`Pushing ${reposWithSummary.length} repos to Feishu...`);
-              const result = await FeishuChannel.push(webhookUrl, reposWithSummary, seenWithSummary);
+              const result = await FeishuChannel.push(webhookUrl, reposWithSummary, seenWithSummary, since);
               pushResults.push({
                 channel: 'feishu',
                 success: result.success,

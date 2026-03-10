@@ -121,24 +121,38 @@ console.log();
 
 // Parse command line args
 const since = process.argv[2] || 'daily';
-const channel = process.argv[3] || 'email';
+const channelArg = process.argv[3] || 'email';
 
-// Validate channel
+// 支持多个渠道：用逗号分隔，如 "email,feishu" 或 "feishu,email"
+const channels = channelArg.split(',').map(c => c.trim());
+
+// Validate channels
 if (!config.channels.feishu && !config.channels.email) {
   console.error('❌ Error: No push channel configured!');
   console.log('\nPlease configure either FEISHU_WEBHOOK_URL or EMAIL_SENDER+EMAIL_PASSWORD in .env file');
   process.exit(1);
 }
 
-if (channel === 'email' && !config.channels.email) {
-  console.error('❌ Error: Email channel selected but not configured!');
-  console.log('\nPlease configure EMAIL_SENDER and EMAIL_PASSWORD in .env file');
+// 检查每个渠道是否已配置
+const invalidChannels = channels.filter(ch => {
+  if (ch === 'email' && !config.channels.email) return true;
+  if (ch === 'feishu' && !config.channels.feishu) return true;
+  if (ch !== 'email' && ch !== 'feishu') return true;
+  return false;
+});
+
+if (invalidChannels.length > 0) {
+  console.error(`❌ Error: 以下渠道未配置或无效: ${invalidChannels.join(', ')}`);
+  console.log('\n可用的渠道:');
+  if (config.channels.email) console.log('  - email');
+  if (config.channels.feishu) console.log('  - feishu');
   process.exit(1);
 }
 
 const params = {
   since,
-  channel,
+  channels, // 使用 channels 数组
+  channel: channels[0], // 向后兼容
   email_to: process.env.EMAIL_TO || config.channels.email?.sender,
   feishu_webhook: process.env.FEISHU_WEBHOOK_URL
 };
@@ -146,9 +160,9 @@ const params = {
 // Show detailed configuration
 console.log('🚀 Execution Configuration:');
 console.log('  Period:', since);
-console.log('  Channel:', channel);
+console.log('  Channels:', channels.join(', '));
 
-if (channel === 'email') {
+if (channels.includes('email')) {
   console.log('\n📧 Email Details:');
   console.log('  Sender (EMAIL_SENDER):', config.channels.email.sender);
   console.log('  Recipient (EMAIL_TO env):', process.env.EMAIL_TO || '(not set)');
@@ -161,6 +175,11 @@ if (channel === 'email') {
     console.log('  To send to a different recipient, add to .env:');
     console.log('    EMAIL_TO=recipient@example.com');
   }
+}
+
+if (channels.includes('feishu')) {
+  console.log('\n💬 Feishu Details:');
+  console.log('  Webhook URL:', process.env.FEISHU_WEBHOOK_URL ? '✅ Configured' : '❌ Not configured');
 }
 
 console.log();
