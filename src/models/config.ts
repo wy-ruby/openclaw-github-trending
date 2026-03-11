@@ -9,6 +9,16 @@ export interface AIConfig {
 }
 
 /**
+ * Resolved AI configuration with all required fields
+ */
+export interface ResolvedAIConfig {
+  provider: 'openai' | 'anthropic';
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+}
+
+/**
  * Feishu channel configuration
  */
 export interface FeishuConfig {

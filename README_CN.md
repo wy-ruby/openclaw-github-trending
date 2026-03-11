@@ -43,17 +43,17 @@ openclaw plugins install openclaw-plugin-github-trending
 }
 ```
 
-**使用自定义供应商（如灵积、月之暗面等）：**
+**使用自定义供应商（如百炼、月之暗面等）：**
 
 ```json
 {
   "plugins": {
     "github-trending": {
       "ai": {
-        "provider": "openai",
+        "provider": "bailian",
         "api_key": "sk-xxx",
         "base_url": "https://coding.dashscope.aliyuncs.com/v1",
-        "model": "kimi-k2.5"
+        "model": "qwen3.5-plus"
       },
       "max_workers": 5,
       "github_token": "github_pat_xxx"

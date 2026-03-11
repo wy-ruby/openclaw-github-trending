@@ -1,38 +1,37 @@
 import { OpenAI } from 'openai';
+import Anthropic from '@anthropic-ai/sdk';
+import { ResolvedAIConfig } from '../models/config';
 import { RepositoryInfo } from '../models/repository';
 
 /**
- * AI configuration interface
- */
-export interface AIConfig {
-  /** OpenAI API key */
-  apiKey: string;
-  /** Base URL for the API (default: https://api.openai.com/v1) */
-  baseUrl?: string;
-  /** Model name (default: gpt-4) */
-  model?: string;
-}
-
-/**
  * AI Summarizer class
- * Generates Chinese summaries for GitHub repositories using OpenAI API
+ * Generates Chinese summaries for GitHub repositories using OpenAI or Anthropic API
  */
 export class AISummarizer {
-  private readonly client: OpenAI;
+  private readonly provider: 'openai' | 'anthropic';
+  private readonly openaiClient?: OpenAI;
+  private readonly anthropicClient?: Anthropic;
   private readonly model: string;
 
   /**
    * Create a new AISummarizer instance
    * @param config AI configuration
    */
-  constructor(config: AIConfig) {
-    const { apiKey, baseUrl = 'https://api.openai.com/v1', model = 'gpt-4' } = config;
+  constructor(config: ResolvedAIConfig) {
+    this.provider = config.provider;
+    this.model = config.model;
 
-    this.client = new OpenAI({
-      apiKey: apiKey,
-      baseURL: baseUrl
-    });
-    this.model = model;
+    if (config.provider === 'openai') {
+      this.openaiClient = new OpenAI({
+        apiKey: config.apiKey,
+        baseURL: config.baseUrl
+      });
+    } else {
+      this.anthropicClient = new Anthropic({
+        apiKey: config.apiKey,
+        baseURL: config.baseUrl
+      });
+    }
   }
 
   /**
@@ -93,15 +92,15 @@ ${readme_content}
   }
 
   /**
-   * Generate AI summary for a repository
+   * Generate AI summary for a repository using OpenAI
    * @param repo Repository information
    * @returns AI-generated summary in Chinese, or empty string if failed
    */
-  async generateSummary(repo: RepositoryInfo): Promise<string> {
+  private async generateSummaryOpenAI(repo: RepositoryInfo): Promise<string> {
     const prompt = this.buildPrompt(repo);
 
     try {
-      const response = await this.client.chat.completions.create({
+      const response = await this.openaiClient!.chat.completions.create({
         model: this.model,
         messages: [
           {
@@ -117,22 +116,64 @@ ${readme_content}
         max_tokens: 300
       });
 
-      // Extract the summary from the response
       const summary = response.choices[0]?.message?.content || '';
       return summary.trim();
     } catch (error) {
-      console.error('Failed to generate AI summary:', error);
+      console.error('Failed to generate AI summary with OpenAI:', error);
       return '';
     }
   }
 
   /**
-   * Generate AI summary from README content
+   * Generate AI summary for a repository using Anthropic
+   * @param repo Repository information
+   * @returns AI-generated summary in Chinese, or empty string if failed
+   */
+  private async generateSummaryAnthropic(repo: RepositoryInfo): Promise<string> {
+    const prompt = this.buildPrompt(repo);
+
+    try {
+      const response = await this.anthropicClient!.messages.create({
+        model: this.model,
+        max_tokens: 300,
+        system: '你是一个专业的技术文档撰写者。你的任务是为 GitHub 仓库生成简洁、准确的中文摘要。摘要应该用中文编写，适合开发者快速了解仓库的用途和特点。',
+        messages: [
+          {
+            role: 'user',
+            content: prompt
+          }
+        ]
+      });
+
+      const firstBlock = response.content[0];
+      const summary = firstBlock.type === 'text' ? firstBlock.text : '';
+      return summary.trim();
+    } catch (error) {
+      console.error('Failed to generate AI summary with Anthropic:', error);
+      return '';
+    }
+  }
+
+  /**
+   * Generate AI summary for a repository
+   * @param repo Repository information
+   * @returns AI-generated summary in Chinese, or empty string if failed
+   */
+  async generateSummary(repo: RepositoryInfo): Promise<string> {
+    if (this.provider === 'openai') {
+      return this.generateSummaryOpenAI(repo);
+    } else {
+      return this.generateSummaryAnthropic(repo);
+    }
+  }
+
+  /**
+   * Generate AI summary from README content using OpenAI
    * @param fullName Repository full name (owner/repo)
    * @param readmeContent README.md content
    * @returns AI-generated summary in Chinese, or empty string if failed
    */
-  async summarizeReadme(fullName: string, readmeContent: string): Promise<string> {
+  private async summarizeReadmeOpenAI(fullName: string, readmeContent: string): Promise<string> {
     const prompt = `你是一个资深的技术专家。请根据以下 GitHub 项目的 README 内容，用中文简明扼要地总结它的核心功能和使用场景。
 
 项目名称：${fullName}
@@ -148,7 +189,7 @@ ${readmeContent}
 摘要应该简洁明了，突出重点。`;
 
     try {
-      const response = await this.client.chat.completions.create({
+      const response = await this.openaiClient!.chat.completions.create({
         model: this.model,
         messages: [
           {
@@ -164,12 +205,68 @@ ${readmeContent}
         max_tokens: 300
       });
 
-      // Extract the summary from the response
       const summary = response.choices[0]?.message?.content || '';
       return summary.trim();
     } catch (error) {
-      console.error('Failed to generate AI summary from README:', error);
+      console.error('Failed to generate AI summary from README with OpenAI:', error);
       return '';
+    }
+  }
+
+  /**
+   * Generate AI summary from README content using Anthropic
+   * @param fullName Repository full name (owner/repo)
+   * @param readmeContent README.md content
+   * @returns AI-generated summary in Chinese, or empty string if failed
+   */
+  private async summarizeReadmeAnthropic(fullName: string, readmeContent: string): Promise<string> {
+    const prompt = `你是一个资深的技术专家。请根据以下 GitHub 项目的 README 内容，用中文简明扼要地总结它的核心功能和使用场景。
+
+项目名称：${fullName}
+
+README 内容：
+${readmeContent}
+
+请生成一个 200-300 字的中文摘要，包含：
+1. 项目的主要功能和用途
+2. 核心特性
+3. 适合的使用场景
+
+摘要应该简洁明了，突出重点。`;
+
+    try {
+      const response = await this.anthropicClient!.messages.create({
+        model: this.model,
+        max_tokens: 300,
+        system: '你是一个专业的技术文档撰写者。你的任务是根据 GitHub 项目的 README 内容生成简洁、准确的中文摘要。摘要应该用中文编写，适合开发者快速了解项目的用途和特点。',
+        messages: [
+          {
+            role: 'user',
+            content: prompt
+          }
+        ]
+      });
+
+      const firstBlock = response.content[0];
+      const summary = firstBlock.type === 'text' ? firstBlock.text : '';
+      return summary.trim();
+    } catch (error) {
+      console.error('Failed to generate AI summary from README with Anthropic:', error);
+      return '';
+    }
+  }
+
+  /**
+   * Generate AI summary from README content
+   * @param fullName Repository full name (owner/repo)
+   * @param readmeContent README.md content
+   * @returns AI-generated summary in Chinese, or empty string if failed
+   */
+  async summarizeReadme(fullName: string, readmeContent: string): Promise<string> {
+    if (this.provider === 'openai') {
+      return this.summarizeReadmeOpenAI(fullName, readmeContent);
+    } else {
+      return this.summarizeReadmeAnthropic(fullName, readmeContent);
     }
   }
 }

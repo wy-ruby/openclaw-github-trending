@@ -3,11 +3,10 @@ import { AISummarizer } from './core/summarizer';
 import { HistoryManager } from './core/history';
 import { FeishuChannel } from './channels/feishu';
 import { EmailChannel } from './channels/email';
-import { ConfigManager } from './core/config';
+import { ConfigManager, OpenClawGlobalConfig, SMTPConfig } from './core/config';
 import { RepositoryInfo } from './models/repository';
 import { GitHubTrendingParams, GitHubTrendingResult, PluginConfig, AIConfig, FeishuConfig, EmailConfig } from './models/config';
 import { PushResult } from './channels/types';
-import { OpenClawConfig, SMTPConfig } from './core/config';
 import { EmailConfig as EmailSendConfig } from './channels/email';
 
 /**
@@ -53,7 +52,7 @@ export interface GitHubTrendingTool {
   handler: (
     params: GitHubTrendingParams,
     pluginConfig: PluginConfig,
-    openclawConfig: OpenClawConfig,
+    openclawConfig: OpenClawGlobalConfig,
     historyData?: any
   ) => Promise<GitHubTrendingResult>;
 }
@@ -93,7 +92,7 @@ async function processRepositoriesWithAI(
 async function githubTrendingHandler(
   params: GitHubTrendingParams,
   pluginConfig: PluginConfig = {},
-  openclawConfig: OpenClawConfig = {},
+  openclawConfig: OpenClawGlobalConfig = {},
   historyData?: any
 ): Promise<GitHubTrendingResult> {
   const { since, channel, channels, email_to, feishu_webhook } = params;

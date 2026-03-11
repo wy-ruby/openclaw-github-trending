@@ -43,17 +43,17 @@ Add your AI provider configuration to `.openclaw/openclaw.json`:
 }
 ```
 
-**Using custom provider (e.g., DashScope, Moonshot):**
+**Using custom provider (e.g., BaiLian, Moonshot):**
 
 ```json
 {
   "plugins": {
     "github-trending": {
       "ai": {
-        "provider": "openai",
+        "provider": "bailian",
         "api_key": "sk-xxx",
         "base_url": "https://coding.dashscope.aliyuncs.com/v1",
-        "model": "kimi-k2.5"
+        "model": "qwen3.5-plus"
       },
       "max_workers": 5,
       "github_token": "github_pat_xxx"

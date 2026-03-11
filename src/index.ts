@@ -4,7 +4,7 @@ import { AISummarizer } from './core/summarizer';
 import { HistoryManager } from './core/history';
 import { FeishuChannel } from './channels/feishu';
 import { EmailChannel } from './channels/email';
-import { ConfigManager } from './core/config';
+import { ConfigManager, OpenClawGlobalConfig } from './core/config';
 import { RepositoryInfo } from './models/repository';
 import { PluginConfig, GitHubTrendingParams } from './models/config';
 import { PushResult } from './channels/types';
@@ -26,10 +26,11 @@ export default function (api: any) {
         config: PluginConfig;
         logger: { info: Function; error: Function; warn: Function };
         storage?: { get: Function; set: Function };
+        openclawConfig?: OpenClawGlobalConfig;
       }
     ) {
       const { since, channel, channels, email_to, feishu_webhook } = params;
-      const { config: pluginConfig, logger, storage } = context;
+      const { config: pluginConfig, logger, storage, openclawConfig } = context;
 
       try {
         // 解析通道配置（向后兼容单个 channel 参数）
@@ -47,11 +48,13 @@ export default function (api: any) {
           }
         }
 
-        // 2. Resolve AI configuration
-        const aiConfig = ConfigManager.getAIConfig(pluginConfig, {});
+        // 2. Resolve AI configuration (priority: plugin config > OpenClaw config > env vars)
+        const aiConfig = ConfigManager.getAIConfig(pluginConfig, openclawConfig);
         if (!aiConfig.apiKey) {
-          throw new Error('AI API key is required. Please configure it in plugin settings.');
+          throw new Error('AI API key is required. Please configure it in plugin settings, OpenClaw global config, or environment variables (OPENAI_API_KEY or ANTHROPIC_API_KEY).');
         }
+
+        logger.info(`Using AI provider: ${aiConfig.provider}, model: ${aiConfig.model}`);
 
         // 3. Fetch trending repositories
         logger.info(`Fetching GitHub trending repositories (${since})`);

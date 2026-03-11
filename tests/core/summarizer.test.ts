@@ -24,6 +24,7 @@ describe('AISummarizer', () => {
     jest.clearAllMocks();
 
     summarizer = new AISummarizer({
+      provider: 'openai',
       apiKey: 'test-api-key',
       baseUrl: 'https://api.openai.com/v1',
       model: 'gpt-4'
@@ -204,6 +205,7 @@ describe('AISummarizer', () => {
 
     it('should use custom model if provided', async () => {
       const customSummarizer = new AISummarizer({
+        provider: 'openai',
         apiKey: 'test-api-key',
         baseUrl: 'https://api.openai.com/v1',
         model: 'gpt-3.5-turbo'

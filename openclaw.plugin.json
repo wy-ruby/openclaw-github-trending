@@ -19,7 +19,7 @@
     "properties": {
       "ai": {
         "type": "object",
-        "description": "AI configuration for generating summaries. Falls back to OpenClaw's AI config if not provided.",
+        "description": "AI configuration for generating summaries. Falls back to OpenClaw's AI config or environment variables if not provided.",
         "properties": {
           "provider": {
             "type": "string",
@@ -29,16 +29,16 @@
           },
           "api_key": {
             "type": "string",
-            "description": "AI provider API key"
+            "description": "AI provider API key. Falls back to OPENAI_API_KEY or ANTHROPIC_API_KEY environment variable."
           },
           "base_url": {
             "type": "string",
-            "description": "API base URL (for OpenAI-compatible providers)"
+            "description": "API base URL (for OpenAI-compatible providers). Falls back to OPENAI_BASE_URL or ANTHROPIC_BASE_URL environment variable."
           },
           "model": {
             "type": "string",
             "default": "gpt-4o-mini",
-            "description": "Model name for summarization"
+            "description": "Model name for summarization (e.g., 'gpt-4o-mini', 'claude-3-5-sonnet-20241022'). Falls back to OpenClaw's default model."
           }
         }
       },
