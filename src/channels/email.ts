@@ -555,7 +555,8 @@ export class EmailChannel {
 
       return {
         success: true,
-        messageId: info.messageId
+        messageId: info.messageId,
+        error: undefined
       };
     } catch (error) {
       return {

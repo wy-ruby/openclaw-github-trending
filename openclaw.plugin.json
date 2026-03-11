@@ -1,5 +1,5 @@
 {
-  "id": "github-trending",
+  "id": "openclaw-github-trending",
   "name": "GitHub Trending",
   "version": "1.0.0",
   "description": "Fetch GitHub trending repositories and push to Feishu or Email with AI summaries",
@@ -7,7 +7,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/wy-ruby/openclaw-plugin-github-trending"
+    "url": "https://github.com/wy-ruby/openclaw-github-trending"
   },
   "entry": "dist/index.js",
   "engines": {
@@ -16,6 +16,7 @@
   },
   "configSchema": {
     "type": "object",
+    "additionalProperties": false,
     "properties": {
       "ai": {
         "type": "object",

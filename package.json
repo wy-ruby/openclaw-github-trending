@@ -1,5 +1,5 @@
 {
-  "name": "openclaw-plugin-github-trending",
+  "name": "openclaw-github-trending",
   "version": "1.0.0",
   "description": "OpenClaw plugin for fetching GitHub trending repositories and pushing to Feishu or Email with AI summaries",
   "main": "dist/index.js",
@@ -28,17 +28,18 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/wy-ruby/openclaw-plugin-github-trending.git"
+    "url": "git+https://github.com/wy-ruby/openclaw-github-trending.git"
   },
   "bugs": {
-    "url": "https://github.com/wy-ruby/openclaw-plugin-github-trending/issues"
+    "url": "https://github.com/wy-ruby/openclaw-github-trending/issues"
   },
-  "homepage": "https://github.com/wy-ruby/openclaw-plugin-github-trending#readme",
+  "homepage": "https://github.com/wy-ruby/openclaw-github-trending#readme",
   "license": "MIT",
   "type": "commonjs",
   "files": [
     "dist",
     "openclaw.plugin.json",
+    "docs",
     "README.md",
     "LICENSE",
     "CHANGELOG.md"
@@ -58,14 +59,20 @@
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",
-    "@types/node": "^25.3.5",
+    "@types/node": "^25.4.0",
     "@types/nodemailer": "^7.0.11",
     "@types/sanitize-html": "^2.16.1",
     "jest": "^30.2.0",
     "ts-jest": "^29.4.6",
+    "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "openclaw": {
+    "extensions": [
+      "./dist/index.js"
+    ]
   }
 }

@@ -272,7 +272,7 @@ async function githubTrendingHandler(
  * Export the GitHub Trending Tool
  */
 export const githubTrendingTool: GitHubTrendingTool = {
-  name: 'github-trending',
+  name: 'openclaw-github-trending',
   description: 'Fetch GitHub trending repositories and push to Feishu or Email',
   parameters: {
     type: 'object',

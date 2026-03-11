@@ -289,7 +289,8 @@ export class FeishuChannel {
         return {
           success: true,
           code: response.data.code,
-          msg: response.data.msg
+          msg: response.data.msg,
+          error: undefined
         };
       } else {
         return {

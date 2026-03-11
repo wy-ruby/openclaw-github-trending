@@ -1,6 +1,6 @@
 # OpenClaw GitHub Trending Plugin
 
-[![npm version](https://badge.fury.io/js/openclaw-plugin-github-trending.svg)](https://badge.fury.io/js/openclaw-plugin-github-trending)
+[![npm version](https://badge.fury.io/js/openclaw-github-trending.svg)](https://badge.fury.io/js/openclaw-github-trending)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 English | [简体中文](./README_CN.md)
@@ -9,7 +9,7 @@ OpenClaw plugin for fetching GitHub trending repositories and pushing to Feishu 
 
 ## Features
 
-- 🔥 **GitHub Trending** — Fetch daily, weekly, or monthly trending repositories
+- 🔥 **GitHub Trending** — Fetch daily (today), weekly (this week), or monthly (this month) trending repositories
 - 🤖 **AI Summaries** — Generate intelligent summaries using OpenAI or Anthropic
 - 📢 **Multi-Channel Push** — Support Feishu and Email notifications
 - 🔄 **Smart Deduplication** — Track repository history and re-push on significant star growth
@@ -18,8 +18,28 @@ OpenClaw plugin for fetching GitHub trending repositories and pushing to Feishu 
 ## Installation
 
 ```bash
-openclaw plugins install openclaw-plugin-github-trending
+openclaw plugin install openclaw-github-trending
 ```
+
+### ⚠️ Security Notice - Allow Non-Bundled Plugin
+
+Since this plugin is a non-bundled plugin (not officially bundled with OpenClaw), you need to explicitly allow it in OpenClaw's configuration file, otherwise you will see a security warning.
+
+1. Open OpenClaw configuration file (usually located at `~/.openclaw/openclaw.json`).
+
+2. Add this plugin's ID to the `plugins.allow` list:
+
+```json
+{
+  "plugins": {
+    "allow": [
+      "openclaw-github-trending"
+    ]
+  }
+}
+```
+
+This tells OpenClaw to trust and allow loading this plugin. The warning will disappear after this configuration.
 
 ## Quick Start
 
@@ -32,7 +52,7 @@ Add your AI provider configuration to `.openclaw/openclaw.json`:
 ```json
 {
   "plugins": {
-    "github-trending": {
+    "openclaw-github-trending": {
       "ai": {
         "provider": "openai",
         "api_key": "sk-xxx",
@@ -43,17 +63,33 @@ Add your AI provider configuration to `.openclaw/openclaw.json`:
 }
 ```
 
-**Using custom provider (e.g., BaiLian, Moonshot):**
+**Using Anthropic (Claude):**
 
 ```json
 {
   "plugins": {
-    "github-trending": {
+    "openclaw-github-trending": {
       "ai": {
-        "provider": "bailian",
+        "provider": "anthropic",
+        "api_key": "sk-ant-xxx",
+        "model": "claude-3-5-sonnet-20241022"
+      }
+    }
+  }
+}
+```
+
+**Using OpenAI-compatible providers (e.g., DashScope, Moonshot, DeepSeek):**
+
+```json
+{
+  "plugins": {
+    "openclaw-github-trending": {
+      "ai": {
+        "provider": "openai",
         "api_key": "sk-xxx",
-        "base_url": "https://coding.dashscope.aliyuncs.com/v1",
-        "model": "qwen3.5-plus"
+        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "model": "qwen-max"
       },
       "max_workers": 5,
       "github_token": "github_pat_xxx"
@@ -69,7 +105,7 @@ Add your AI provider configuration to `.openclaw/openclaw.json`:
 ```json
 {
   "plugins": {
-    "github-trending": {
+    "openclaw-github-trending": {
       "channels": {
         "feishu": {
           "webhook_url": "https://open.feishu.cn/open-apis/bot/v2/hook/xxx"
@@ -85,7 +121,7 @@ Add your AI provider configuration to `.openclaw/openclaw.json`:
 ```json
 {
   "plugins": {
-    "github-trending": {
+    "openclaw-github-trending": {
       "channels": {
         "email": {
           "smtp_host": "smtp.gmail.com",
@@ -101,32 +137,82 @@ Add your AI provider configuration to `.openclaw/openclaw.json`:
 
 ### 3. Set Up Scheduled Tasks
 
-Define automated tasks in `.openclaw/openclaw.json`:
+#### Option A: Quick Setup with CLI Command (Recommended)
 
-```json
-{
-  "tasks": [
-    {
-      "name": "Daily Trending to Feishu",
-      "schedule": "0 9 * * *",
-      "tool": "github-trending",
-      "params": {
-        "since": "daily",
-        "channel": "feishu"
-      }
-    },
-    {
-      "name": "Weekly Trending to Email",
-      "schedule": "0 10 * * 1",
-      "tool": "github-trending",
-      "params": {
-        "since": "weekly",
-        "channel": "email",
-        "email_to": "team@example.com"
-      }
-    }
-  ]
-}
+Use the `/setup-trending` command in OpenClaw chat to quickly verify your configuration and get instructions for scheduling:
+
+**Basic usage:**
+```
+/setup-trending daily 9:00
+/setup-trending weekly monday 10:00
+/setup-trending monthly 1st 8:00
+```
+
+**With specific channels:**
+```
+/setup-trending daily 9:00 feishu
+/setup-trending daily 9:00 email
+/setup-trending daily 9:00 feishu,email
+```
+
+**What the command does:**
+1. Verifies AI configuration and channel settings
+2. Fetches trending repositories once to test the configuration
+3. Returns statistics and a ready-to-use cron command
+
+**Example output:**
+```
+✅ Configuration verified!
+
+Period: daily
+Channels: feishu
+Repositories found: 25
+New repositories: 18
+Already seen: 7
+
+To schedule this as a recurring job, run:
+openclaw cron add --every 1d --at "9:00" --agent <your-agent-id> --system-event '{"tool":"openclaw-github-trending","params":{"since":"daily","channels":["feishu"]}}'
+```
+
+**Common scheduling examples:**
+
+| Frequency | Command | Description |
+|-----------|---------|-------------|
+| Daily | `/setup-trending daily 9:00` | Fetches **today's** trending, suggests daily at 9:00 AM schedule |
+| Weekly | `/setup-trending weekly monday 10:00` | Fetches **this week's** trending, suggests weekly on Monday at 10:00 AM schedule |
+| Monthly | `/setup-trending monthly 1st 8:00` | Fetches **this month's** trending, suggests monthly on the 1st at 8:00 AM schedule |
+
+**Schedule using OpenClaw cron:**
+
+After running `/setup-trending`, copy the suggested command and modify the `--agent` parameter to your agent ID:
+
+```bash
+# Daily at 9:00 AM
+openclaw cron add --every 1d --at "9:00" --agent <your-agent-id> --system-event '{"tool":"openclaw-github-trending","params":{"since":"daily","channels":["feishu"]}}'
+
+# Weekly on Monday at 10:00 AM
+openclaw cron add --every 7d --at "monday 10:00" --agent <your-agent-id> --system-event '{"tool":"openclaw-github-trending","params":{"since":"weekly","channels":["email"]}}'
+
+# Monthly on the 1st at 8:00 AM
+openclaw cron add --every 30d --at "1st 8:00" --agent <your-agent-id> --system-event '{"tool":"openclaw-github-trending","params":{"since":"monthly","channels":["feishu","email"]}}'
+```
+
+**Manage scheduled tasks:**
+```bash
+# List all scheduled tasks
+openclaw cron list
+
+# View run history
+openclaw cron runs
+
+# Manually trigger a task
+openclaw cron run <job-id>
+
+# Delete a task
+openclaw cron rm <job-id>
+
+# Edit a task
+openclaw cron edit <job-id>
 ```
 
 ## Configuration
@@ -147,18 +233,31 @@ The plugin supports OpenAI-compatible API providers. If not configured in the pl
 #### Supported AI Providers
 
 - **OpenAI**: `provider: "openai"`, default base URL
-- **Anthropic**: `provider: "anthropic"`
-- **Custom providers**: Any OpenAI-compatible API (e.g., DashScope, Moonshot, DeepSeek, etc.)
+- **Anthropic (Claude)**: `provider: "anthropic"`
+- **OpenAI-compatible providers**: Any API compatible with OpenAI format (e.g., DashScope, Moonshot, DeepSeek, Kimi, etc.)
 
-**Example with custom provider:**
+**Example with DashScope (Qwen):**
 
 ```json
 {
   "ai": {
     "provider": "openai",
     "api_key": "sk-xxx",
-    "base_url": "https://coding.dashscope.aliyuncs.com/v1",
-    "model": "kimi-k2.5"
+    "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    "model": "qwen-max"
+  }
+}
+```
+
+**Example with Moonshot:**
+
+```json
+{
+  "ai": {
+    "provider": "openai",
+    "api_key": "sk-xxx",
+    "base_url": "https://api.moonshot.cn/v1",
+    "model": "moonshot-v1-8k"
   }
 }
 ```
@@ -216,9 +315,17 @@ The `github-trending` tool accepts the following parameters:
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `since` | string | Yes | Time period: `"daily"`, `"weekly"`, or `"monthly"` |
-| `channel` | string | Yes | Push channel: `"feishu"` or `"email"` |
+| `channels` | array | No | Push channels array: `["feishu"]`, `["email"]`, or `["feishu", "email"]` (recommended) |
+| `channel` | string | No | Push channel: `"feishu"` or `"email"` (deprecated, use `channels` instead) |
 | `email_to` | string | No | Email recipient (overrides config) |
 | `feishu_webhook` | string | No | Feishu webhook URL (overrides config) |
+
+**Push Rules:**
+- If `channels` parameter is specified in the call, use the specified channels
+- If not specified, automatically read from plugin config's `channels` setting
+- Configured Feishu → push to Feishu
+- Configured Email → push to Email
+- Both configured → push to both channels
 
 ## Smart Deduplication
 
@@ -234,50 +341,46 @@ The plugin tracks repository history and intelligently decides when to re-push:
 
 ```bash
 # Via OpenClaw CLI
-openclaw tools call github-trending --params '{"since": "daily", "channel": "feishu"}'
+openclaw tools call openclaw-github-trending --params '{"since": "daily", "channels": ["feishu"]}'
 
 # Via OpenClaw API
-curl -X POST http://localhost:3000/api/tools/github-trending \
+curl -X POST http://localhost:3000/api/tools/openclaw-github-trending \
   -H "Content-Type: application/json" \
-  -d '{"since": "daily", "channel": "email", "email_to": "user@example.com"}'
+  -d '{"since": "daily", "channels": ["email"], "email_to": "user@example.com"}'
 ```
 
-### Multiple Scheduled Tasks
+### Setting Up Multiple Scheduled Tasks
 
-```json
-{
-  "tasks": [
-    {
-      "name": "Morning Daily Trending",
-      "schedule": "0 9 * * *",
-      "tool": "github-trending",
-      "params": {
-        "since": "daily",
-        "channel": "feishu"
-      }
-    },
-    {
-      "name": "Weekly Report",
-      "schedule": "0 10 * * 1",
-      "tool": "github-trending",
-      "params": {
-        "since": "weekly",
-        "channel": "email",
-        "email_to": "team@company.com"
-      }
-    },
-    {
-      "name": "Monthly Highlights",
-      "schedule": "0 10 1 * *",
-      "tool": "github-trending",
-      "params": {
-        "since": "monthly",
-        "channel": "email",
-        "email_to": "management@company.com"
-      }
-    }
-  ]
-}
+Instead of configuring tasks in JSON, use the `openclaw cron add` command to schedule jobs:
+
+```bash
+# Daily trending to Feishu at 9:00 AM
+openclaw cron add --every 1d --at "9:00" --agent <your-agent-id> \
+  --system-event '{"tool":"openclaw-github-trending","params":{"since":"daily","channels":["feishu"]}}' \
+  --name "daily-trending-feishu"
+
+# Weekly trending to Email every Monday at 10:00 AM
+openclaw cron add --every 7d --at "monday 10:00" --agent <your-agent-id> \
+  --system-event '{"tool":"openclaw-github-trending","params":{"since":"weekly","channels":["email"],"email_to":"team@company.com"}}' \
+  --name "weekly-trending-email"
+
+# Monthly trending to both channels on the 1st at 8:00 AM
+openclaw cron add --every 30d --at "1st 8:00" --agent <your-agent-id> \
+  --system-event '{"tool":"openclaw-github-trending","params":{"since":"monthly","channels":["feishu","email"]}}' \
+  --name "monthly-trending-both"
+```
+
+**View your scheduled jobs:**
+```bash
+openclaw cron list
+```
+
+**Example output:**
+```
+ID    NAME                       SCHEDULE         NEXT RUN          STATUS
+1     daily-trending-feishu      every 1d @ 9:00  2026-03-12 09:00  enabled
+2     weekly-trending-email      every 7d @ mon   2026-03-17 10:00  enabled
+3     monthly-trending-both      every 30d @ 1st  2026-04-01 08:00  enabled
 ```
 
 ## Security Best Practices
@@ -343,7 +446,7 @@ npm run test:coverage
 npm link
 
 # In OpenClaw project
-openclaw plugins install openclaw-plugin-github-trending
+openclaw plugins install openclaw-github-trending
 ```
 
 ## Contributing
@@ -357,8 +460,8 @@ MIT © [王允](https://github.com/yourusername)
 ## Support
 
 - 📧 Email: 906971957@qq.com
-- 🐛 Issues: [GitHub Issues](https://github.com/yourusername/openclaw-plugin-github-trending/issues)
-- 💬 Discussions: [GitHub Discussions](https://github.com/yourusername/openclaw-plugin-github-trending/discussions)
+- 🐛 Issues: [GitHub Issues](https://github.com/yourusername/openclaw-github-trending/issues)
+- 💬 Discussions: [GitHub Discussions](https://github.com/yourusername/openclaw-github-trending/discussions)
 
 ## Changelog
 
