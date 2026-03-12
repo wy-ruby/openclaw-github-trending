@@ -8,23 +8,27 @@ import { ConfigManager, OpenClawGlobalConfig } from './core/config';
 import { RepositoryInfo } from './models/repository';
 import { PluginConfig, GitHubTrendingParams } from './models/config';
 import { PushResult } from './channels/types';
+import { FileLogger } from './core/file-logger';
+
+const fileLogger = FileLogger.getInstance();
 
 export default function (api: any) {
+  fileLogger.info('[Plugin Init] Starting GitHub Trending plugin registration...');
   // Register CLI command for setting up scheduled trending jobs
   api.registerCli?.({
     name: 'setup-trending',
-    description: 'Setup GitHub trending schedule and run once (e.g., /setup-trending daily 9:00)',
+    description: 'Setup GitHub trending schedule or run immediately (e.g., /setup-trending daily 9:00)',
     parameters: [
       {
         name: 'since',
         type: 'string',
-        description: 'Time period: daily, weekly, or monthly',
+        description: 'Time period: daily, weekly, monthly',
         required: true
       },
       {
         name: 'time',
         type: 'string',
-        description: 'Time specification (e.g., "9:00", "monday 10:00")',
+        description: 'Time specification (e.g., "9:00", "monday 10:00") or "now" for immediate execution',
         required: true
       },
       {
@@ -37,17 +41,23 @@ export default function (api: any) {
     async execute(args: string[], context: any) {
       const { logger, config: pluginConfig, openclawConfig } = context;
 
+      fileLogger.info('[CLI] setup-trending command executed', { args, pluginConfigAvailable: !!pluginConfig });
+
       if (args.length < 2) {
         return {
           content: [{
             type: 'text',
-            text: 'Usage: /setup-trending <daily|weekly|monthly> <time> [channels]\n\n' +
+            text: 'Usage: /setup-trending <daily|weekly|monthly> <time|now> [channels]\n\n' +
                   'Examples:\n' +
-                  '  /setup-trending daily 9:00\n' +
-                  '  /setup-trending daily 9:00 feishu\n' +
-                  '  /setup-trending weekly monday 10:00 email\n' +
-                  '  /setup-trending daily 9:00 feishu,email\n\n' +
-                  'Note: This command sets up the configuration and runs once.\n' +
+                  '  /setup-trending daily now                        # Run immediately\n' +
+                  '  /setup-trending daily 9:00                       # Setup for 9:00 daily\n' +
+                  '  /setup-trending daily now feishu                 # Run immediately to feishu\n' +
+                  '  /setup-trending daily 9:00 feishu                # Setup for 9:00 with feishu\n' +
+                  '  /setup-trending weekly monday 10:00 email        # Setup weekly with email\n' +
+                  '  /setup-trending monthly 1st 8:00 feishu,email    # Setup monthly with both\n\n' +
+                  'Quick testing:\n' +
+                  '  /setup-trending daily now                        # Quick test (recommended)\n\n' +
+                  'Note: This command verifies configuration and can run immediately or show setup instructions.\n' +
                   'To schedule recurring jobs, use: openclaw cron add --every <period> --agent <agent-id> --system-event \'{"tool":"openclaw-github-trending","params":{"since":"daily","channels":["feishu"]}}\''
           }],
           isError: true
@@ -69,17 +79,24 @@ export default function (api: any) {
       // Extract time spec (everything after since until we hit a channel name)
       const channelKeywords = ['feishu', 'email'];
       let channels: string[] = [];
-
-      // Find where channels start
+      let runNow = false;
       let channelStartIndex = -1;
-      for (let i = 1; i < args.length; i++) {
-        if (channelKeywords.includes(args[i].toLowerCase()) || args[i].includes(',')) {
-          channelStartIndex = i;
-          break;
+
+      // Check if time parameter is "now"
+      if (args[1].toLowerCase() === 'now') {
+        runNow = true;
+        channelStartIndex = 2; // Channels start from args[2] onwards
+      } else {
+        // Parse channels normally
+        for (let i = 1; i < args.length; i++) {
+          if (channelKeywords.includes(args[i].toLowerCase()) || args[i].includes(',')) {
+            channelStartIndex = i;
+            break;
+          }
         }
       }
 
-      if (channelStartIndex === -1) {
+      if (channelStartIndex === -1 || channelStartIndex >= args.length) {
         // No explicit channels, use all configured channels
         if (pluginConfig?.channels?.feishu?.webhook_url) channels.push('feishu');
         if (pluginConfig?.channels?.email?.sender) channels.push('email');
@@ -106,6 +123,13 @@ export default function (api: any) {
           channels
         };
 
+        fileLogger.info('[CLI] Running GitHub trending fetch for verification', {
+          since,
+          channels,
+          runNow,
+          toolParams
+        });
+
         // Call the tool execute function directly
         const toolContext = {
           config: pluginConfig,
@@ -114,11 +138,15 @@ export default function (api: any) {
           openclawConfig
         };
 
-        logger.info(`Running GitHub trending fetch for ${since} period...`);
+        logger?.info(`Running GitHub trending fetch for ${since} period...`);
 
         // Reuse the tool execution logic
         const toolPluginConfig = toolContext.config;
         const toolStorage = toolContext.storage;
+
+        // Fix: Use OpenClaw config as fallback if plugin config is undefined or empty
+        const hasPluginConfig = toolPluginConfig && (Object.keys(toolPluginConfig).length > 0 || toolPluginConfig.channels);
+        const effectiveConfig: PluginConfig = hasPluginConfig ? toolPluginConfig : (openclawConfig as any)?.plugins?.entries?.['openclaw-github-trending']?.config || {};
 
         // Load history
         const historyManager = new HistoryManager();
@@ -132,14 +160,17 @@ export default function (api: any) {
         // Resolve AI configuration
         const aiConfig = ConfigManager.getAIConfig(toolPluginConfig, openclawConfig);
         if (!aiConfig.apiKey) {
+          fileLogger.error('[CLI] AI API key not found', { hasPluginConfigAI: !!toolPluginConfig?.ai?.api_key });
           throw new Error('AI API key is required. Please configure it in plugin settings, OpenClaw global config, or environment variables (OPENAI_API_KEY or ANTHROPIC_API_KEY).');
         }
 
-        logger.info(`Using AI provider: ${aiConfig.provider}, model: ${aiConfig.model}`);
+        fileLogger.info('[CLI] Using AI provider', { provider: aiConfig.provider, model: aiConfig.model });
+        logger?.info(`Using AI provider: ${aiConfig.provider}, model: ${aiConfig.model}`);
 
         // Fetch trending repositories
-        logger.info(`Fetching GitHub trending repositories (${since})`);
-        const fetcher = new GitHubFetcher();
+        fileLogger.info('[CLI] Fetching GitHub trending', { period: since });
+        logger?.info(`Fetching GitHub trending repositories (${since})`);
+        const fetcher = new GitHubFetcher(effectiveConfig);
         const repositories = await fetcher.fetchTrending(since as 'daily' | 'weekly' | 'monthly');
 
         // Categorize repositories
@@ -152,23 +183,288 @@ export default function (api: any) {
           historyConfig
         );
 
-        logger.info(`Found ${repositories.length} repos, ${shouldPush.length} to push`);
+        fileLogger.info('[CLI] Categorization complete', {
+          total: repositories.length,
+          shouldPush: shouldPush.length,
+          newlySeen: newlySeen.length,
+          alreadySeen: alreadySeen.length
+        });
+        logger?.info(`Found ${repositories.length} repos, ${shouldPush.length} to push`);
 
-        return {
-          content: [{
-            type: 'text',
-            text: `✅ Configuration verified!\n\n` +
-                  `Period: ${since}\n` +
-                  `Channels: ${channels.join(', ')}\n` +
-                  `Repositories found: ${repositories.length}\n` +
-                  `New repositories: ${newlySeen.length}\n` +
-                  `Already seen: ${alreadySeen.length}\n\n` +
-                  `To schedule this as a recurring job, run:\n` +
-                  `openclaw cron add --every 1d --agent <your-agent> --system-event '{"tool":"openclaw-github-trending","params":{"since":"${since}","channels":["${channels.join('","')}"]}}'`
-          }]
-        };
+        // Log detailed repository information
+        logger?.info('[CLI] Detailed repository list:');
+        repositories.forEach((repo, index) => {
+          logger?.info(`  ${index + 1}. ${repo.full_name}`);
+          logger?.info(`     Stars: ${repo.stars.toLocaleString()} | Description: ${repo.description || 'N/A'}`);
+        });
+
+        logger?.info('[CLI] Categorization results:');
+        if (newlySeen.length > 0) {
+          logger?.info(`  ➕ Newly seen (${newlySeen.length}):`);
+          newlySeen.forEach((repo, idx) => {
+            logger?.info(`     ${idx + 1}. ${repo.full_name} (${repo.stars} stars)`);
+          });
+        }
+        if (shouldPush.length > 0) {
+          logger?.info(`  ✅ Should push (${shouldPush.length}):`);
+          shouldPush.forEach((repo, idx) => {
+            logger?.info(`     ${idx + 1}. ${repo.full_name} (${repo.stars} stars)`);
+          });
+        }
+        if (alreadySeen.length > 0) {
+          logger?.info(`  🔁 Already seen (${alreadySeen.length}):`);
+          alreadySeen.forEach((repo, idx) => {
+            const history = historyManager.getProject(repo.full_name);
+            const starsDiff = repo.stars - (history?.last_stars || 0);
+            logger?.info(`     ${idx + 1}. ${repo.full_name} (${repo.stars} stars, +${starsDiff} since last)`);
+          });
+        }
+
+        // If runNow flag is set, execute the full tool flow including summaries and push
+        if (runNow) {
+          fileLogger.info('[CLI] Running immediate execution (runNow=true)');
+          logger?.info('[CLI] 🚀 Running immediate execution...');
+
+          // Generate AI summaries
+          const summarizer = new AISummarizer(aiConfig);
+          const maxWorkers = ConfigManager.getMaxWorkers(toolPluginConfig);
+          const reposWithSummary: RepositoryInfo[] = [];
+
+          logger?.info(`Generating AI summaries with ${maxWorkers} workers...`);
+          fileLogger.info('[CLI] Generating AI summaries', { maxWorkers, repoCount: shouldPush.length });
+
+          // Process repositories in batches with concurrency control
+          for (let i = 0; i < shouldPush.length; i += maxWorkers) {
+            const batch = shouldPush.slice(i, i + maxWorkers);
+
+            const batchResults = await Promise.allSettled(
+              batch.map(async (repo) => {
+                try {
+                  logger?.info(`  📖 [${repo.full_name}] Fetching README...`);
+                  fileLogger.info('[CLI] Fetching README', { fullName: repo.full_name });
+                  const readmeContent = await fetcher.fetchReadme(repo.full_name);
+
+                  let summary = '';
+
+                  if (readmeContent) {
+                    const readmePreview = readmeContent.substring(0, 100).replace(/\n/g, ' ').trim();
+                    logger?.info(`  ✓ README found (${readmeContent.length} chars), preview: "${readmePreview}..."`);
+                    logger?.info(`  🤖 [${repo.full_name}] Generating AI summary from README...`);
+                    const startTime = Date.now();
+                    summary = await summarizer.summarizeReadme(repo.full_name, readmeContent);
+                    const duration = Date.now() - startTime;
+                    logger?.info(`  ✓ Summary generated (${summary.length} chars) in ${duration}ms`);
+                    if (summary) {
+                      logger?.info(`  📝 [${repo.full_name}] Summary: ${summary.substring(0, 100)}...`);
+                    } else {
+                      logger?.warn(`  ⚠ [${repo.full_name}] Summary is empty`);
+                    }
+                    fileLogger.info('[CLI] Generating summary from README', { fullName: repo.full_name });
+                  } else {
+                    logger?.warn(`  ✗ No README found for ${repo.full_name}`);
+                    logger?.info(`  🤖 [${repo.full_name}] Generating AI summary from metadata...`);
+                    const startTime = Date.now();
+                    summary = await summarizer.generateSummary(repo);
+                    const duration = Date.now() - startTime;
+                    logger?.info(`  ✓ Summary generated (${summary.length} chars) in ${duration}ms`);
+                    if (summary) {
+                      logger?.info(`  📝 [${repo.full_name}] Summary: ${summary.substring(0, 100)}...`);
+                    } else {
+                      logger?.warn(`  ⚠ [${repo.full_name}] Summary is empty`);
+                    }
+                    fileLogger.info('[CLI] Using metadata for summary', { fullName: repo.full_name });
+                  }
+
+                  return { ...repo, ai_summary: summary };
+                } catch (error) {
+                  logger?.warn(`Failed to generate summary for ${repo.full_name}: ${error}`);
+                  fileLogger.error('[CLI] Failed to generate summary', {
+                    fullName: repo.full_name,
+                    error: error instanceof Error ? error.message : 'Unknown error'
+                  });
+                  return { ...repo, ai_summary: '' };
+                }
+              })
+            );
+
+            // Collect results from this batch
+            for (const result of batchResults) {
+              if (result.status === 'fulfilled') {
+                reposWithSummary.push(result.value);
+              }
+            }
+          }
+
+          // Push to channels
+          logger?.info(`Pushing ${reposWithSummary.length} repos to ${channels.join(', ')}...`);
+          fileLogger.info('[CLI] Starting push to channels', { channels, repoCount: reposWithSummary.length });
+
+          const seenWithSummary = alreadySeen.map(r => ({
+            ...r,
+            ai_summary: historyManager.getProject(r.full_name)?.ai_summary || ''
+          }));
+
+          const pushResults: { channel: string; success: boolean; messageId?: string; error?: string }[] = [];
+
+          for (const targetChannel of channels) {
+            try {
+              if (targetChannel === 'feishu') {
+                const webhookUrl = toolPluginConfig?.channels?.feishu?.webhook_url;
+                if (!webhookUrl) {
+                  fileLogger.warn('[CLI] Feishu webhook URL not configured, skipping');
+                  pushResults.push({ channel: 'feishu', success: false, error: 'Webhook URL not configured' });
+                  continue;
+                }
+
+                const result = await FeishuChannel.push(webhookUrl, reposWithSummary, seenWithSummary, since as 'daily' | 'weekly' | 'monthly');
+
+                if (!result) {
+                  fileLogger.error('[CLI] Feishu push returned undefined');
+                  pushResults.push({ channel: 'feishu', success: false, error: 'Push returned undefined' });
+                  continue;
+                }
+
+                pushResults.push({
+                  channel: 'feishu',
+                  success: result.success,
+                  messageId: result.messageId,
+                  error: result.error || undefined
+                });
+
+                if (result.success) {
+                  fileLogger.info('[CLI] ✅ Feishu push successful!');
+                  logger?.info(`✅ Feishu push successful!`);
+                } else {
+                  fileLogger.error(`[CLI] ❌ Feishu push failed: ${result.error || 'Unknown error'}`);
+                  logger?.error(`❌ Feishu push failed: ${result.error || 'Unknown error'}`);
+                }
+              } else if (targetChannel === 'email') {
+                const emailTo = toolPluginConfig?.channels?.email?.sender;
+                if (!emailTo) {
+                  fileLogger.warn('[CLI] Email recipient not configured, skipping');
+                  pushResults.push({ channel: 'email', success: false, error: 'Recipient not configured' });
+                  continue;
+                }
+
+                if (!toolPluginConfig?.channels?.email) {
+                  fileLogger.warn('[CLI] Email SMTP configuration missing, skipping');
+                  pushResults.push({ channel: 'email', success: false, error: 'SMTP configuration missing' });
+                  continue;
+                }
+
+                if (!toolPluginConfig.channels.email.password) {
+                  fileLogger.warn('[CLI] Email SMTP password missing, skipping');
+                  pushResults.push({ channel: 'email', success: false, error: 'SMTP password not configured' });
+                  continue;
+                }
+
+                logger?.info(`Sending email to ${emailTo}...`);
+                fileLogger.info('[CLI] Sending email', { to: emailTo, subject: `GitHub Trending ${since}` });
+
+                const result = await EmailChannel.send(
+                  {
+                    from: toolPluginConfig.channels.email.sender!,
+                    to: emailTo,
+                    subject: `GitHub Trending ${since === 'daily' ? 'Daily' : since === 'weekly' ? 'Weekly' : 'Monthly'}`,
+                    smtp: {
+                      host: toolPluginConfig.channels.email.smtp_host || 'smtp.gmail.com',
+                      port: toolPluginConfig.channels.email.smtp_port || 587,
+                      secure: false,
+                      auth: {
+                        user: toolPluginConfig.channels.email.sender!,
+                        pass: toolPluginConfig.channels.email.password!
+                      }
+                    }
+                  },
+                  reposWithSummary,
+                  seenWithSummary,
+                  since as 'daily' | 'weekly' | 'monthly'
+                );
+
+                pushResults.push({
+                  channel: 'email',
+                  success: result.success,
+                  messageId: result.messageId,
+                  error: result.error || undefined
+                });
+
+                if (result.success) {
+                  fileLogger.info('[CLI] ✅ Email sent successfully!');
+                  logger?.info(`✅ Email sent successfully! Message ID: ${result.messageId || 'N/A'}`);
+                } else {
+                  fileLogger.error(`[CLI] ❌ Failed to send email: ${result.error || 'Unknown error'}`);
+                  logger?.error(`❌ Failed to send email: ${result.error || 'Unknown error'}`);
+                }
+              }
+            } catch (error) {
+              fileLogger.error(`[CLI] Failed to push to ${targetChannel}`, {
+                error: error instanceof Error ? error.message : 'Unknown error',
+                stack: error instanceof Error ? error.stack : undefined
+              });
+              pushResults.push({
+                channel: targetChannel,
+                success: false,
+                error: error instanceof Error ? error.message : 'Unknown error'
+              });
+            }
+          }
+
+          // Update history
+          historyManager.markPushed(reposWithSummary);
+          if (toolStorage) {
+            await toolStorage.set('github-trending-history', historyManager.exportData());
+          }
+
+          const successCount = pushResults.filter(r => r.success).length;
+          const failedChannels = pushResults.filter(r => !r.success).map(r => r.channel);
+
+          fileLogger.info('[CLI] Immediate execution completed', {
+            successCount,
+            failedCount: failedChannels.length,
+            totalChannels: channels.length,
+            pushResults
+          });
+
+          return {
+            content: [{
+              type: 'text',
+              text: `🚀 **Immediate Execution Completed!**\n\n` +
+                    `Period: ${since}\n` +
+                    `Channels: ${channels.join(', ')}\n` +
+                    `Repositories found: ${repositories.length}\n` +
+                    `New repositories: ${newlySeen.length}\n` +
+                    `Already seen: ${alreadySeen.length}\n` +
+                    `Pushed: ${reposWithSummary.length}\n\n` +
+                    `Results:\n` +
+                    pushResults.map(r =>
+                      `${r.success ? '✅' : '❌'} ${r.channel}: ${r.success ? 'Success' : r.error || 'Failed'}`
+                    ).join('\n') + '\n\n' +
+                    (successCount === channels.length
+                      ? `🎉 **All channels pushed successfully!**\n`
+                      : successCount > 0
+                        ? `⚠️ **Partial success: ${successCount}/${channels.length} channels succeeded**\n`
+                        : `❌ **All channels failed!**\n`)
+            }]
+          };
+        } else {
+          // Return setup instructions as before
+          return {
+            content: [{
+              type: 'text',
+              text: `✅ Configuration verified!\n\n` +
+                    `Period: ${since}\n` +
+                    `Channels: ${channels.join(', ')}\n` +
+                    `Repositories found: ${repositories.length}\n` +
+                    `New repositories: ${newlySeen.length}\n` +
+                    `Already seen: ${alreadySeen.length}\n\n` +
+                    `To schedule this as a recurring job, run:\n` +
+                    `openclaw cron add --every 1d --agent <your-agent> --system-event '{"tool":"openclaw-github-trending","params":{"since":"${since}","channels":["${channels.join('","')}"]}}'`
+            }]
+          };
+        }
       } catch (error) {
-        logger.error('Failed to setup trending job:', error);
+        fileLogger.error('[CLI] Failed to setup trending job', error);
+        logger?.error('Failed to setup trending job:', error);
         return {
           content: [{
             type: 'text',
@@ -187,7 +483,6 @@ export default function (api: any) {
     parameters: {
       since: z.enum(['daily', 'weekly', 'monthly']).describe('Time period for trending'),
       channels: z.array(z.enum(['feishu', 'email'])).optional().describe('Push channels (array: ["email"], ["feishu"], or ["email", "feishu"])'),
-      channel: z.enum(['feishu', 'email']).optional().describe('Push channel (deprecated, use channels instead)'),
       email_to: z.string().email().optional().describe('Email recipient (overrides config)'),
       feishu_webhook: z.string().url().optional().describe('Feishu webhook URL (overrides config)')
     },
@@ -200,28 +495,61 @@ export default function (api: any) {
         openclawConfig?: OpenClawGlobalConfig;
       }
     ) {
-      const { since, channel, channels, email_to, feishu_webhook } = params;
+      const { since, channels, email_to, feishu_webhook } = params;
       const { config: pluginConfig, logger, storage, openclawConfig } = context;
 
-      // Fix: Handle undefined context fields
-      const safeLogger = logger || {
-        info: console.log,
-        warn: console.warn,
-        error: console.error
+      fileLogger.info('[Tool Execute] Starting execution', {
+        params,
+        configAvailable: !!pluginConfig,
+        storageAvailable: !!storage,
+        openclawConfigAvailable: !!openclawConfig
+      });
+
+      // Create a logger wrapper that logs to both OpenClaw logger and file
+      const safeLogger = {
+        info: (msg: string, ...args: any[]) => {
+          fileLogger.info(msg, ...args);
+          if (logger?.info) logger.info(msg, ...args);
+        },
+        warn: (msg: string, ...args: any[]) => {
+          fileLogger.warn(msg, ...args);
+          if (logger?.warn) logger.warn(msg, ...args);
+        },
+        error: (msg: string, ...args: any[]) => {
+          fileLogger.error(msg, ...args);
+          if (logger?.error) logger.error(msg, ...args);
+        }
       };
 
-      // Fix: Use OpenClaw config as fallback if plugin config is undefined
-      const effectiveConfig: PluginConfig = pluginConfig || (openclawConfig as any)?.plugins?.entries?.['openclaw-github-trending']?.config || {};
+      // Fix: Use OpenClaw config as fallback if plugin config is undefined or empty
+      const hasPluginConfig = pluginConfig && (Object.keys(pluginConfig).length > 0 || pluginConfig.channels);
+      const effectiveConfig: PluginConfig = hasPluginConfig ? pluginConfig : (openclawConfig as any)?.plugins?.entries?.['openclaw-github-trending']?.config || {};
 
       safeLogger.info('[GitHub Trending] Starting execution...');
       safeLogger.info('[GitHub Trending] pluginConfig:', pluginConfig ? 'available' : 'undefined');
+      safeLogger.info('[GitHub Trending] pluginConfig content:', JSON.stringify(pluginConfig, null, 2));
+      safeLogger.info('[GitHub Trending] openclawConfig available:', openclawConfig ? 'yes' : 'no');
+      safeLogger.info('[GitHub Trending] hasPluginConfig check:', hasPluginConfig);
       safeLogger.info('[GitHub Trending] effectiveConfig:', Object.keys(effectiveConfig).length > 0 ? 'available' : 'empty');
+      safeLogger.info('[GitHub Trending] effectiveConfig content:', JSON.stringify(effectiveConfig, null, 2));
+      safeLogger.info('[GitHub Trending] proxy in effectiveConfig:', effectiveConfig?.proxy ? JSON.stringify(effectiveConfig.proxy) : 'not found');
 
       try {
-        // 解析通道配置（向后兼容单个 channel 参数）
-        const targetChannels: ('feishu' | 'email')[] = channels || (channel ? [channel] : []);
+        // 解析通道配置（仅使用 channels 参数）
+        let targetChannels: ('feishu' | 'email')[] = channels || [];
+        
+        // 如果没有显式指定通道，从配置中自动读取已配置的通道
         if (targetChannels.length === 0) {
-          throw new Error('请指定至少一个推送通道：channels 参数（推荐）或 channel 参数（已废弃）');
+          if (effectiveConfig?.channels?.feishu?.webhook_url) {
+            targetChannels.push('feishu');
+          }
+          if (effectiveConfig?.channels?.email?.sender && effectiveConfig?.channels?.email?.password) {
+            targetChannels.push('email');
+          }
+        }
+        
+        if (targetChannels.length === 0) {
+          throw new Error('请指定至少一个推送通道：channels 参数，或在配置中配置 webhook_url 或 email');
         }
 
         // 1. Load history from storage
@@ -244,8 +572,8 @@ export default function (api: any) {
 
         // 3. Fetch trending repositories
         safeLogger.info(`Fetching GitHub trending repositories (${since})`);
-        const fetcher = new GitHubFetcher();
-        const repositories = await fetcher.fetchTrending(since);
+        const fetcher = new GitHubFetcher(effectiveConfig);
+        const repositories = await fetcher.fetchTrending(since as 'daily' | 'weekly' | 'monthly');
 
         // 4. Categorize repositories
         const historyConfig = {
@@ -259,6 +587,35 @@ export default function (api: any) {
 
         safeLogger.info(`Found ${repositories.length} repos, ${shouldPush.length} to push`);
 
+        // Log detailed repository information
+        safeLogger.info('[Repositories] Detailed repository list:');
+        repositories.forEach((repo, index) => {
+          safeLogger.info(`  ${index + 1}. ${repo.full_name}`);
+          safeLogger.info(`     Stars: ${repo.stars.toLocaleString()} | Description: ${repo.description || 'N/A'}`);
+        });
+
+        safeLogger.info('[Repositories] Categorization results:');
+        if (newlySeen.length > 0) {
+          safeLogger.info(`  ➕ Newly seen (${newlySeen.length}):`);
+          newlySeen.forEach((repo, idx) => {
+            safeLogger.info(`     ${idx + 1}. ${repo.full_name} (${repo.stars} stars)`);
+          });
+        }
+        if (shouldPush.length > 0) {
+          safeLogger.info(`  ✅ Should push (${shouldPush.length}):`);
+          shouldPush.forEach((repo, idx) => {
+            safeLogger.info(`     ${idx + 1}. ${repo.full_name} (${repo.stars} stars)`);
+          });
+        }
+        if (alreadySeen.length > 0) {
+          safeLogger.info(`  🔁 Already seen (${alreadySeen.length}):`);
+          alreadySeen.forEach((repo, idx) => {
+            const history = historyManager.getProject(repo.full_name);
+            const starsDiff = repo.stars - (history?.last_stars || 0);
+            safeLogger.info(`     ${idx + 1}. ${repo.full_name} (${repo.stars} stars, +${starsDiff} since last)`);
+          });
+        }
+
         // 5. Generate AI summaries for repos to push (with concurrency control)
         const summarizer = new AISummarizer(aiConfig);
         const maxWorkers = ConfigManager.getMaxWorkers(effectiveConfig);
@@ -269,26 +626,46 @@ export default function (api: any) {
         // Process repositories in batches with concurrency control
         for (let i = 0; i < shouldPush.length; i += maxWorkers) {
           const batch = shouldPush.slice(i, i + maxWorkers);
+          safeLogger.info(`[Batch ${Math.floor(i / maxWorkers) + 1}/${Math.ceil(shouldPush.length / maxWorkers)}] Processing ${batch.length} repositories...`);
 
           const batchResults = await Promise.allSettled(
             batch.map(async (repo) => {
               try {
-                safeLogger.info(`Fetching README for ${repo.full_name}...`);
+                safeLogger.info(`  📖 [${repo.full_name}] Fetching README...`);
                 const readmeContent = await fetcher.fetchReadme(repo.full_name);
 
                 let summary = '';
 
                 if (readmeContent) {
-                  safeLogger.info(`README found for ${repo.full_name}, generating summary from README...`);
+                  const readmePreview = readmeContent.substring(0, 100).replace(/\n/g, ' ').trim();
+                  safeLogger.info(`  ✓ README found (${readmeContent.length} chars), preview: "${readmePreview}..."`);
+                  safeLogger.info(`  🤖 [${repo.full_name}] Generating AI summary from README...`);
+                  const startTime = Date.now();
                   summary = await summarizer.summarizeReadme(repo.full_name, readmeContent);
+                  const duration = Date.now() - startTime;
+                  safeLogger.info(`  ✓ Summary generated (${summary.length} chars) in ${duration}ms`);
+                  if (summary) {
+                    safeLogger.info(`  📝 [${repo.full_name}] Summary: ${summary.substring(0, 100)}...`);
+                  } else {
+                    safeLogger.warn(`  ⚠ [${repo.full_name}] Summary is empty`);
+                  }
                 } else {
-                  safeLogger.info(`No README found for ${repo.full_name}, using repository metadata...`);
+                  safeLogger.warn(`  ✗ No README found for ${repo.full_name}`);
+                  safeLogger.info(`  🤖 [${repo.full_name}] Generating AI summary from metadata...`);
+                  const startTime = Date.now();
                   summary = await summarizer.generateSummary(repo);
+                  const duration = Date.now() - startTime;
+                  safeLogger.info(`  ✓ Summary generated (${summary.length} chars) in ${duration}ms`);
+                  if (summary) {
+                    safeLogger.info(`  📝 [${repo.full_name}] Summary: ${summary.substring(0, 100)}...`);
+                  } else {
+                    safeLogger.warn(`  ⚠ [${repo.full_name}] Summary is empty`);
+                  }
                 }
 
                 return { ...repo, ai_summary: summary };
               } catch (error) {
-                safeLogger.warn(`Failed to generate summary for ${repo.full_name}: ${error}`);
+                safeLogger.error(`  ❌ [${repo.full_name}] Failed to generate summary: ${error}`);
                 return { ...repo, ai_summary: '' };
               }
             })
@@ -425,6 +802,16 @@ export default function (api: any) {
         const successCount = pushResults.filter(r => r.success).length;
         const failedChannels = pushResults.filter(r => !r.success).map(r => r.channel);
 
+        fileLogger.info('[Tool] Execution completed', {
+          successCount,
+          failedCount: failedChannels.length,
+          totalChannels: targetChannels.length,
+          pushedCount: reposWithSummary.length,
+          newCount: newlySeen.length,
+          seenCount: alreadySeen.length,
+          channels: pushResults
+        });
+
         return {
           content: [{
             type: 'text',
@@ -446,6 +833,10 @@ export default function (api: any) {
         };
 
       } catch (error) {
+        fileLogger.error('[Tool] Execution failed', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : undefined
+        });
         safeLogger.error('GitHub trending tool failed:', error);
         return {
           content: [{

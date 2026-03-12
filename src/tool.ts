@@ -32,11 +32,6 @@ export interface GitHubTrendingTool {
         };
         description: 'Push channels (array: ["email"], ["feishu"], or ["email", "feishu"])';
       };
-      channel?: {
-        type: string;
-        enum: ['feishu', 'email'];
-        description: 'Push channel (deprecated, use channels instead)';
-      };
       email_to?: {
         type: string;
         format: 'email';
@@ -95,10 +90,10 @@ async function githubTrendingHandler(
   openclawConfig: OpenClawGlobalConfig = {},
   historyData?: any
 ): Promise<GitHubTrendingResult> {
-  const { since, channel, channels, email_to, feishu_webhook } = params;
+  const { since, channels, email_to, feishu_webhook } = params;
 
-  // 解析通道配置（向后兼容单个 channel 参数）
-  const targetChannels: ('feishu' | 'email')[] = channels || (channel ? [channel] : []);
+  // 解析通道配置（仅使用 channels 参数）
+  const targetChannels: ('feishu' | 'email')[] = channels || [];
   if (targetChannels.length === 0) {
     return {
       success: false,
@@ -108,7 +103,7 @@ async function githubTrendingHandler(
       total_count: 0,
       pushed_to: '',
       timestamp: new Date().toISOString(),
-      message: '请指定至少一个推送通道：channels 参数（推荐）或 channel 参数（已废弃）'
+      message: '请指定至少一个推送通道：channels 参数'
     };
   }
 
@@ -289,11 +284,6 @@ export const githubTrendingTool: GitHubTrendingTool = {
           enum: ['feishu', 'email']
         },
         description: 'Push channels (array: ["email"], ["feishu"], or ["email", "feishu"])'
-      },
-      channel: {
-        type: 'string',
-        enum: ['feishu', 'email'],
-        description: 'Push channel (deprecated, use channels instead)'
       },
       email_to: {
         type: 'string',

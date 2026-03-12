@@ -2,6 +2,9 @@ import { OpenAI } from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
 import { ResolvedAIConfig } from '../models/config';
 import { RepositoryInfo } from '../models/repository';
+import { FileLogger } from '../core/file-logger';
+
+const fileLogger = FileLogger.getInstance();
 
 /**
  * AI Summarizer class
@@ -99,7 +102,15 @@ ${readme_content}
   private async generateSummaryOpenAI(repo: RepositoryInfo): Promise<string> {
     const prompt = this.buildPrompt(repo);
 
+    fileLogger.info('[AI Summarizer] Generating summary using OpenAI', {
+      fullName: repo.full_name,
+      model: this.model,
+      provider: this.provider,
+      promptLength: prompt.length
+    });
+
     try {
+      const startTime = Date.now();
       const response = await this.openaiClient!.chat.completions.create({
         model: this.model,
         messages: [
@@ -115,11 +126,23 @@ ${readme_content}
         temperature: 0.7,
         max_tokens: 300
       });
+      const duration = Date.now() - startTime;
 
       const summary = response.choices[0]?.message?.content || '';
+      fileLogger.info('[AI Summarizer] ✅ Summary generated successfully', {
+        fullName: repo.full_name,
+        summaryLength: summary.length,
+        durationMs: duration,
+        finishReason: response.choices[0]?.finish_reason
+      });
+
       return summary.trim();
     } catch (error) {
-      console.error('Failed to generate AI summary with OpenAI:', error);
+      fileLogger.error('[AI Summarizer] ❌ Failed to generate summary with OpenAI', {
+        fullName: repo.full_name,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      });
       return '';
     }
   }
@@ -132,7 +155,15 @@ ${readme_content}
   private async generateSummaryAnthropic(repo: RepositoryInfo): Promise<string> {
     const prompt = this.buildPrompt(repo);
 
+    fileLogger.info('[AI Summarizer] Generating summary using Anthropic', {
+      fullName: repo.full_name,
+      model: this.model,
+      provider: this.provider,
+      promptLength: prompt.length
+    });
+
     try {
+      const startTime = Date.now();
       const response = await this.anthropicClient!.messages.create({
         model: this.model,
         max_tokens: 300,
@@ -144,12 +175,25 @@ ${readme_content}
           }
         ]
       });
+      const duration = Date.now() - startTime;
 
       const firstBlock = response.content[0];
       const summary = firstBlock.type === 'text' ? firstBlock.text : '';
+
+      fileLogger.info('[AI Summarizer] ✅ Summary generated successfully', {
+        fullName: repo.full_name,
+        summaryLength: summary.length,
+        durationMs: duration,
+        usage: response.usage
+      });
+
       return summary.trim();
     } catch (error) {
-      console.error('Failed to generate AI summary with Anthropic:', error);
+      fileLogger.error('[AI Summarizer] ❌ Failed to generate summary with Anthropic', {
+        fullName: repo.full_name,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      });
       return '';
     }
   }
@@ -174,27 +218,36 @@ ${readme_content}
    * @returns AI-generated summary in Chinese, or empty string if failed
    */
   private async summarizeReadmeOpenAI(fullName: string, readmeContent: string): Promise<string> {
-    const prompt = `你是一个资深的技术专家。请根据以下 GitHub 项目的 README 内容，用中文简明扼要地总结它的核心功能和使用场景。
+    const prompt = `你是一个资深的技术专家。请根据以下 GitHub 项目的 README 内容,用中文简明扼要地总结它的核心功能和使用场景。
 
-项目名称：${fullName}
+项目名称:${fullName}
 
-README 内容：
+README 内容:
 ${readmeContent}
 
-请生成一个 200-300 字的中文摘要，包含：
+请生成一个 200-300 字的中文摘要,包含:
 1. 项目的主要功能和用途
 2. 核心特性
 3. 适合的使用场景
 
-摘要应该简洁明了，突出重点。`;
+摘要应该简洁明了,突出重点。`;
+
+    fileLogger.info('[AI Summarizer] Generating README summary using OpenAI', {
+      fullName,
+      model: this.model,
+      provider: this.provider,
+      readmeLength: readmeContent.length,
+      promptLength: prompt.length
+    });
 
     try {
+      const startTime = Date.now();
       const response = await this.openaiClient!.chat.completions.create({
         model: this.model,
         messages: [
           {
             role: 'system',
-            content: '你是一个专业的技术文档撰写者。你的任务是根据 GitHub 项目的 README 内容生成简洁、准确的中文摘要。摘要应该用中文编写，适合开发者快速了解项目的用途和特点。'
+            content: '你是一个专业的技术文档撰写者。你的任务是根据 GitHub 项目的 README 内容生成简洁、准确的中文摘要。摘要应该用中文编写,适合开发者快速了解项目的用途和特点。'
           },
           {
             role: 'user',
@@ -204,11 +257,23 @@ ${readmeContent}
         temperature: 0.7,
         max_tokens: 300
       });
+      const duration = Date.now() - startTime;
 
       const summary = response.choices[0]?.message?.content || '';
+      fileLogger.info('[AI Summarizer] ✅ README summary generated successfully', {
+        fullName,
+        summaryLength: summary.length,
+        durationMs: duration,
+        finishReason: response.choices[0]?.finish_reason
+      });
+
       return summary.trim();
     } catch (error) {
-      console.error('Failed to generate AI summary from README with OpenAI:', error);
+      fileLogger.error('[AI Summarizer] ❌ Failed to generate README summary with OpenAI', {
+        fullName,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      });
       return '';
     }
   }
@@ -220,25 +285,34 @@ ${readmeContent}
    * @returns AI-generated summary in Chinese, or empty string if failed
    */
   private async summarizeReadmeAnthropic(fullName: string, readmeContent: string): Promise<string> {
-    const prompt = `你是一个资深的技术专家。请根据以下 GitHub 项目的 README 内容，用中文简明扼要地总结它的核心功能和使用场景。
+    const prompt = `你是一个资深的技术专家。请根据以下 GitHub 项目的 README 内容,用中文简明扼要地总结它的核心功能和使用场景。
 
-项目名称：${fullName}
+项目名称:${fullName}
 
-README 内容：
+README 内容:
 ${readmeContent}
 
-请生成一个 200-300 字的中文摘要，包含：
+请生成一个 200-300 字的中文摘要,包含:
 1. 项目的主要功能和用途
 2. 核心特性
 3. 适合的使用场景
 
-摘要应该简洁明了，突出重点。`;
+摘要应该简洁明了,突出重点。`;
+
+    fileLogger.info('[AI Summarizer] Generating README summary using Anthropic', {
+      fullName,
+      model: this.model,
+      provider: this.provider,
+      readmeLength: readmeContent.length,
+      promptLength: prompt.length
+    });
 
     try {
+      const startTime = Date.now();
       const response = await this.anthropicClient!.messages.create({
         model: this.model,
         max_tokens: 300,
-        system: '你是一个专业的技术文档撰写者。你的任务是根据 GitHub 项目的 README 内容生成简洁、准确的中文摘要。摘要应该用中文编写，适合开发者快速了解项目的用途和特点。',
+        system: '你是一个专业的技术文档撰写者。你的任务是根据 GitHub 项目的 README 内容生成简洁、准确的中文摘要。摘要应该用中文编写,适合开发者快速了解项目的用途和特点。',
         messages: [
           {
             role: 'user',
@@ -246,12 +320,25 @@ ${readmeContent}
           }
         ]
       });
+      const duration = Date.now() - startTime;
 
       const firstBlock = response.content[0];
       const summary = firstBlock.type === 'text' ? firstBlock.text : '';
+
+      fileLogger.info('[AI Summarizer] ✅ README summary generated successfully', {
+        fullName,
+        summaryLength: summary.length,
+        durationMs: duration,
+        usage: response.usage
+      });
+
       return summary.trim();
     } catch (error) {
-      console.error('Failed to generate AI summary from README with Anthropic:', error);
+      fileLogger.error('[AI Summarizer] ❌ Failed to generate README summary with Anthropic', {
+        fullName,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      });
       return '';
     }
   }

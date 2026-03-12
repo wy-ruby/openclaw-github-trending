@@ -55,6 +55,14 @@ export interface HistoryConfig {
 }
 
 /**
+ * Proxy configuration (supports http://user:pass@host:port or https://host:port format)
+ */
+export interface ProxyConfig {
+  enabled?: boolean;
+  url?: string;
+}
+
+/**
  * Plugin configuration
  */
 export interface PluginConfig {
@@ -63,6 +71,7 @@ export interface PluginConfig {
   history?: HistoryConfig;
   max_workers?: number;
   github_token?: string;
+  proxy?: ProxyConfig;
 }
 
 /**
@@ -70,8 +79,7 @@ export interface PluginConfig {
  */
 export interface GitHubTrendingParams {
   since: 'daily' | 'weekly' | 'monthly';
-  channel?: 'feishu' | 'email';  // 已废弃，建议使用 channels
-  channels?: ('feishu' | 'email')[];  // 新的多通道支持
+  channels?: ('feishu' | 'email')[];
   email_to?: string;
   feishu_webhook?: string;
 }

@@ -2,6 +2,9 @@ import * as markdown from '../utils/markdown';
 import { RepositoryInfo } from '../models/repository';
 import { PushResult } from './types';
 import nodemailer, { Transporter } from 'nodemailer';
+import { FileLogger } from '../core/file-logger';
+
+const fileLogger = FileLogger.getInstance();
 
 /**
  * Email configuration interface
@@ -530,7 +533,21 @@ export class EmailChannel {
     seenRepositories: RepositoryInfo[],
     since: 'daily' | 'weekly' | 'monthly' = 'monthly'
   ): Promise<PushResult> {
+    fileLogger.info('[Email Channel] Starting email send', {
+      since,
+      newCount: newRepositories.length,
+      seenCount: seenRepositories.length,
+      from: config.from,
+      to: config.to,
+      subject: config.subject,
+      smtpHost: config.smtp.host,
+      smtpPort: config.smtp.port
+    });
+
     try {
+      fileLogger.debug('[Email Channel] Creating SMTP transport...');
+      const startTime = Date.now();
+
       // Create transport with SMTP configuration
       const transport: Transporter = nodemailer.createTransport({
         host: config.smtp.host,
@@ -539,18 +556,49 @@ export class EmailChannel {
         auth: {
           user: config.smtp.auth.user,
           pass: config.smtp.auth.pass
-        }
+        },
+        logger: false,
+        debug: false
+      });
+
+      const transportCreateTime = Date.now();
+      fileLogger.info('[Email Channel] SMTP transport created', {
+        durationMs: transportCreateTime - startTime
+      });
+
+      // Verify SMTP connection
+      fileLogger.debug('[Email Channel] Verifying SMTP connection...');
+      const verified = await transport.verify();
+      const verifyDuration = Date.now() - transportCreateTime;
+      fileLogger.info('[Email Channel] SMTP connection verified', {
+        verified,
+        durationMs: verifyDuration
       });
 
       // Generate HTML content
+      fileLogger.debug('[Email Channel] Generating HTML content...');
       const html = EmailChannel.generateHTML(newRepositories, seenRepositories, since);
+      fileLogger.info('[Email Channel] HTML content generated', {
+        htmlSize: html.length
+      });
 
       // Send email
+      fileLogger.info('[Email Channel] Sending email...');
+      const sendStartTime = Date.now();
       const info = await transport.sendMail({
         from: config.from,
         to: config.to,
         subject: config.subject,
         html: html
+      });
+      const sendDuration = Date.now() - sendStartTime;
+
+      fileLogger.info('[Email Channel] ✅ Email sent successfully', {
+        messageId: info.messageId,
+        accepted: info.accepted,
+        rejected: info.rejected,
+        pending: info.pending,
+        durationMs: sendDuration
       });
 
       return {
@@ -559,6 +607,11 @@ export class EmailChannel {
         error: undefined
       };
     } catch (error) {
+      fileLogger.error('[Email Channel] ❌ Email send failed', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      });
+
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error'

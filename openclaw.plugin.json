@@ -126,6 +126,21 @@
             "description": "Re-push if stars increased by this amount"
           }
         }
+      },
+      "proxy": {
+        "type": "object",
+        "description": "HTTP/HTTPS proxy configuration for accessing GitHub (e.g., http://user:pass@127.0.0.1:7890)",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "default": false,
+            "description": "Enable proxy for GitHub requests"
+          },
+          "url": {
+            "type": "string",
+            "description": "Proxy URL (supports http://user:pass@host:port or https://host:port format)"
+          }
+        }
       }
     }
   }

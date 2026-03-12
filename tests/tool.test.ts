@@ -129,7 +129,7 @@ describe('githubTrendingTool', () => {
   describe('handler', () => {
     const mockParams: GitHubTrendingParams = {
       since: 'daily',
-      channel: 'feishu',
+      channels: ['feishu'],
       feishu_webhook: 'https://open.feishu.cn/open-apis/bot/v2/hook/test'
     };
 
@@ -289,7 +289,7 @@ describe('githubTrendingTool', () => {
       it('should include repository data with AI summaries in email HTML', async () => {
         const emailParams: GitHubTrendingParams = {
           since: 'daily',
-          channel: 'email',
+          channels: ['email'],
           email_to: 'user@example.com'
         };
 
@@ -342,7 +342,7 @@ describe('githubTrendingTool', () => {
       it('should handle email send failure', async () => {
         const emailParams: GitHubTrendingParams = {
           since: 'daily',
-          channel: 'email',
+          channels: ['email'],
           email_to: 'user@example.com'
         };
 
@@ -495,7 +495,7 @@ describe('githubTrendingTool', () => {
 
         const singleChannelParams: GitHubTrendingParams = {
           since: 'daily',
-          channel: 'feishu',
+          channels: ['feishu'],
           feishu_webhook: 'https://open.feishu.cn/open-apis/bot/v2/hook/test'
         };
 

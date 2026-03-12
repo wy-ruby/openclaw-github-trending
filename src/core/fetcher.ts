@@ -1,6 +1,10 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { RepositoryInfo } from '../models/repository';
+import { FileLogger } from '../core/file-logger';
+import { PluginConfig } from '../models/config';
+
+const fileLogger = FileLogger.getInstance();
 
 /**
  * GitHub Trending Fetcher
@@ -9,6 +13,59 @@ import { RepositoryInfo } from '../models/repository';
 export class GitHubFetcher {
   private readonly BASE_URL = 'https://github.com';
   private readonly RAW_URL = 'https://raw.githubusercontent.com';
+  private readonly proxyConfig?: { enabled?: boolean; url?: string };
+
+  constructor(config?: PluginConfig) {
+    this.proxyConfig = config?.proxy;
+    if (this.proxyConfig?.enabled && this.proxyConfig.url) {
+      fileLogger.info('[GitHub Fetcher] Proxy enabled', {
+        proxyUrl: this.proxyConfig.url
+      });
+    }
+  }
+
+  /**
+   * Create axios instance with proxy configuration
+   */
+  private createAxiosInstance(proxyConfig?: { enabled?: boolean; url?: string }) {
+    const axiosConfig: any = {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      }
+    };
+
+    // Apply proxy if enabled
+    if (proxyConfig?.enabled && proxyConfig.url) {
+      fileLogger.info('[GitHub Fetcher] Applying proxy to axios', {
+        proxyUrl: proxyConfig.url
+      });
+
+      const proxyUrl = proxyConfig.url;
+      const match = proxyUrl.match(/^(https?):\/\/(?:([^:]+):([^@]+)@)?([^:]+):(\d+)$/);
+
+      if (match) {
+        const [, protocol, username, password, host, port] = match;
+        axiosConfig.proxy = {
+          protocol: protocol || 'http',
+          host: host,
+          port: parseInt(port, 10),
+          ...(username && password ? { auth: { username, password } } : {})
+        };
+        fileLogger.info('[GitHub Fetcher] Proxy configuration applied', {
+          protocol,
+          host,
+          port,
+          hasAuth: !!username
+        });
+      } else {
+        fileLogger.warn('[GitHub Fetcher] Invalid proxy URL format, using default axios instance', {
+          proxyUrl
+        });
+      }
+    }
+
+    return axios.create(axiosConfig);
+  }
 
   /**
    * Parse star count from string (supports k suffix)
@@ -131,11 +188,22 @@ export class GitHubFetcher {
 
     const url = `${this.BASE_URL}/trending?since=${since}`;
 
+    fileLogger.info('[GitHub Fetcher] Fetching trending repositories', {
+      since,
+      url,
+      proxyConfig: this.proxyConfig,
+    });
+
     try {
-      const response = await axios.get(url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
+      const axiosInstance = this.createAxiosInstance(this.proxyConfig);
+      const startTime = Date.now();
+      const response = await axiosInstance.get(url);
+      const duration = Date.now() - startTime;
+
+      fileLogger.info('[GitHub Fetcher] Got response from GitHub', {
+        status: response.status,
+        durationMs: duration,
+        dataLength: response.data?.length || 0
       });
 
       if (!response.data) {
@@ -146,8 +214,19 @@ export class GitHubFetcher {
         throw new Error(`Failed to fetch trending page: HTTP ${response.status}`);
       }
 
-      return this.parseTrendingPage(response.data);
+      fileLogger.debug('[GitHub Fetcher] Parsing HTML content...');
+      const repos = this.parseTrendingPage(response.data);
+      fileLogger.info('[GitHub Fetcher] ✅ Successfully parsed trending page', {
+        repoCount: repos.length
+      });
+
+      return repos;
     } catch (error) {
+      fileLogger.error('[GitHub Fetcher] Failed to fetch trending repositories', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      });
+
       if (error instanceof Error) {
         throw new Error(`Failed to fetch trending page: ${error.message}`);
       }
@@ -165,33 +244,58 @@ export class GitHubFetcher {
     const readmeFiles = ['README.md', 'README.rst', 'README.txt', 'README'];
     const branches = ['main', 'master'];
 
+    fileLogger.debug('[GitHub Fetcher] Fetching README', {
+      fullName,
+      readmeFiles,
+      branches
+    });
+
     for (const readmeName of readmeFiles) {
       for (const branch of branches) {
         const readmeUrl = `${this.RAW_URL}/${fullName}/${branch}/${readmeName}`;
 
         try {
-          const response = await axios.get(readmeUrl, {
-            headers: {
-              'Accept': 'text/plain;charset=utf-8'
-            },
+          const axiosInstance = this.createAxiosInstance(this.proxyConfig);
+          const startTime = Date.now();
+          const response = await axiosInstance.get(readmeUrl, {
             timeout: 10000 // 10 second timeout
           });
+          const duration = Date.now() - startTime;
 
           if (response.status === 200 && response.data) {
+            fileLogger.info('[GitHub Fetcher] ✅ README found', {
+              fullName,
+              readmeName,
+              branch,
+              contentLength: response.data.length,
+              durationMs: duration
+            });
             return response.data;
           }
         } catch (error) {
           // Continue to next combination if this one fails
           if (axios.isAxiosError(error) && error.response?.status === 404) {
+            fileLogger.debug('[GitHub Fetcher] README not found', {
+              fullName,
+              readmeName,
+              branch
+            });
             continue;
           }
           // For other errors, log and continue
+          fileLogger.warn('[GitHub Fetcher] Error fetching README', {
+            fullName,
+            readmeName,
+            branch,
+            error: error instanceof Error ? error.message : 'Unknown error'
+          });
           continue;
         }
       }
     }
 
     // No README found in any combination
+    fileLogger.info('[GitHub Fetcher] No README found in any combination', { fullName });
     return '';
   }
 }

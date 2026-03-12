@@ -1,6 +1,9 @@
 import axios from 'axios';
 import { RepositoryInfo } from '../models/repository';
 import { PushResult } from './types';
+import { FileLogger } from '../core/file-logger';
+
+const fileLogger = FileLogger.getInstance();
 
 /**
  * Feishu Channel for pushing GitHub trending repositories
@@ -270,6 +273,13 @@ export class FeishuChannel {
     seenRepositories: RepositoryInfo[],
     since: 'daily' | 'weekly' | 'monthly' = 'monthly'
   ): Promise<PushResult> {
+    fileLogger.info('[Feishu Channel] Starting push', {
+      since,
+      newCount: newRepositories.length,
+      seenCount: seenRepositories.length,
+      webhookUrl: webhookUrl.replace(/\/\/(.*?)(@)/, '//***$2')
+    });
+
     const card = FeishuChannel.buildCard(newRepositories, seenRepositories, since);
 
     // 飞书卡片消息格式
@@ -279,13 +289,29 @@ export class FeishuChannel {
     };
 
     try {
+      fileLogger.debug('[Feishu Channel] Sending request to webhook...', {
+        messageSize: JSON.stringify(message).length
+      });
+
+      const startTime = Date.now();
       const response = await axios.post(webhookUrl, message, {
         headers: {
           'Content-Type': 'application/json'
         }
       });
+      const duration = Date.now() - startTime;
 
-      if (response.status === 200) {
+      fileLogger.info('[Feishu Channel] Received response', {
+        status: response.status,
+        durationMs: duration,
+        responseData: response.data
+      });
+
+      if (response.status === 200 && response.data.code === 0) {
+        fileLogger.info('[Feishu Channel] ✅ Push successful', {
+          code: response.data.code,
+          message: response.data.msg
+        });
         return {
           success: true,
           code: response.data.code,
@@ -293,17 +319,27 @@ export class FeishuChannel {
           error: undefined
         };
       } else {
+        fileLogger.error('[Feishu Channel] ❌ Push failed', {
+          status: response.status,
+          code: response.data.code,
+          message: response.data.msg
+        });
         return {
           success: false,
           code: response.status,
-          error: `HTTP ${response.status}: ${response.statusText}`
+          error: `HTTP ${response.status}: ${response.statusText}, Code: ${response.data.code}, Message: ${response.data.msg}`
         };
       }
     } catch (error) {
+      fileLogger.error('[Feishu Channel] ❌ Request failed', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      });
+
       if (axios.isAxiosError(error)) {
         return {
           success: false,
-          error: error.message
+          error: `Axios error: ${error.message}, status: ${error.response?.status}, data: ${JSON.stringify(error.response?.data)}`
         };
       }
       return {
