@@ -72,7 +72,7 @@ export class ConfigManager {
 
   /**
    * Get AI configuration with proper fallback logic
-   * Priority: plugin config > OpenClaw global config > environment variables
+   * Priority: plugin config > OpenClaw global config > default values
    *
    * @param pluginConfig Plugin's own configuration
    * @param openclawConfig OpenClaw's global configuration (from api.config)
@@ -131,29 +131,12 @@ export class ConfigManager {
       }
     }
 
-    // Priority 3: Environment variables (fallback)
-    const envApiKey = process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY;
-    if (envApiKey) {
-      const isAnthropic = !!process.env.ANTHROPIC_API_KEY;
-      const provider = isAnthropic ? 'anthropic' : 'openai';
-
-      return {
-        provider,
-        apiKey: envApiKey,
-        baseUrl: process.env.OPENAI_BASE_URL ||
-                 process.env.ANTHROPIC_BASE_URL ||
-                 (isAnthropic ? 'https://api.anthropic.com' : 'https://api.openai.com/v1'),
-        model: process.env.OPENAI_MODEL ||
-               process.env.ANTHROPIC_MODEL ||
-               (isAnthropic ? 'claude-3-5-sonnet-20241022' : 'gpt-4o-mini')
-      };
-    }
-
-    // No configuration found - return empty config with defaults
-    // This will cause an error later when trying to use the AI
+    // Priority 3: Return default config with empty API key (will cause error later if not configured)
+    // This allows the plugin to initialize even without AI config, and the error will be caught at usage time
+    const defaultProvider = 'openai';
     return {
-      provider: 'openai',
-      apiKey: '',
+      provider: defaultProvider,
+      apiKey: '', // Will cause error when actually used
       baseUrl: 'https://api.openai.com/v1',
       model: 'gpt-4o-mini'
     };

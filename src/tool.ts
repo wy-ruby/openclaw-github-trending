@@ -184,7 +184,7 @@ async function githubTrendingHandler(
           error: result.error
         });
       } else if (targetChannel === 'email') {
-        const emailTo = email_to || pluginConfig?.channels?.email?.sender;
+        const emailTo = email_to || pluginConfig?.channels?.email?.recipient || pluginConfig?.channels?.email?.sender;
         if (!emailTo) {
           pushResults.push({ channel: 'email', success: false, error: 'Email recipient not provided' });
           continue;

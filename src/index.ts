@@ -14,6 +14,16 @@ const fileLogger = FileLogger.getInstance();
 
 export default function (api: any) {
   fileLogger.info('[Plugin Init] Starting GitHub Trending plugin registration...');
+  
+  // Store api.config for later use in tool execution
+  let openclawConfigFromApi: any = null;
+  try {
+    openclawConfigFromApi = api.config;
+    fileLogger.info('[Plugin Init] api.config available', { hasConfig: !!openclawConfigFromApi });
+  } catch (e) {
+    fileLogger.warn('[Plugin Init] api.config not available', { error: e });
+  }
+  
   // Register CLI command for setting up scheduled trending jobs
   api.registerCli?.({
     name: 'setup-trending',
@@ -527,7 +537,10 @@ export default function (api: any) {
       }
     ) {
       const { since, channels, email_to, feishu_webhook } = params;
-      const { config: pluginConfig, logger, storage, openclawConfig } = context;
+      const { config: pluginConfig, logger, storage, openclawConfig: openclawConfigFromContext } = context;
+      
+      // Use api.config as fallback if context.openclawConfig is not available
+      const openclawConfig = openclawConfigFromContext || openclawConfigFromApi;
 
       // Check if plugin is enabled
       const pluginId = 'openclaw-github-trending';
@@ -566,6 +579,15 @@ export default function (api: any) {
 
       // Fix: Use OpenClaw config as fallback if plugin config is undefined or empty
       const hasPluginConfig = pluginConfig && (Object.keys(pluginConfig).length > 0 || pluginConfig.channels);
+      
+      // Debug: Log openclawConfig structure
+      fileLogger.info('[Tool Execute] openclawConfig structure:', {
+        hasPlugins: !!openclawConfig?.plugins,
+        hasEntries: !!openclawConfig?.plugins?.entries,
+        hasOurEntry: !!openclawConfig?.plugins?.entries?.['openclaw-github-trending'],
+        ourEntryKeys: openclawConfig?.plugins?.entries?.['openclaw-github-trending'] ? Object.keys(openclawConfig.plugins.entries['openclaw-github-trending']) : []
+      });
+      
       const effectiveConfig: PluginConfig = hasPluginConfig ? pluginConfig : (openclawConfig as any)?.plugins?.entries?.['openclaw-github-trending']?.config || {};
 
       safeLogger.info('[GitHub Trending] Starting execution...');
@@ -575,6 +597,7 @@ export default function (api: any) {
       safeLogger.info('[GitHub Trending] hasPluginConfig check:', hasPluginConfig);
       safeLogger.info('[GitHub Trending] effectiveConfig:', Object.keys(effectiveConfig).length > 0 ? 'available' : 'empty');
       safeLogger.info('[GitHub Trending] effectiveConfig content:', JSON.stringify(effectiveConfig, null, 2));
+      safeLogger.info('[GitHub Trending] channels in effectiveConfig:', effectiveConfig?.channels ? JSON.stringify(effectiveConfig.channels) : 'not found');
       safeLogger.info('[GitHub Trending] proxy in effectiveConfig:', effectiveConfig?.proxy ? JSON.stringify(effectiveConfig.proxy) : 'not found');
 
       try {
@@ -611,7 +634,7 @@ export default function (api: any) {
           throw new Error('AI API key is required. Please configure it in plugin settings, OpenClaw global config, or environment variables (OPENAI_API_KEY or ANTHROPIC_API_KEY).');
         }
 
-        safeLogger.info(`Using AI provider: ${aiConfig.provider}, model: ${aiConfig.model}`);
+        safeLogger.info(`Using AI provider: ${aiConfig.provider}, model: ${aiConfig.model}, baseUrl: ${aiConfig.baseUrl}`);
 
         // 3. Fetch trending repositories
         safeLogger.info(`Fetching GitHub trending repositories (${since})`);
