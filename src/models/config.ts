@@ -36,6 +36,7 @@ export interface EmailConfig {
   password?: string;
   from_name?: string;
   timeout?: number;
+  recipient?: string;
 }
 
 /**

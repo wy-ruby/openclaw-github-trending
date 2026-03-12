@@ -1,6 +1,24 @@
 import { PluginConfig, AIConfig, ResolvedAIConfig } from '../models/config';
 
 /**
+ * Plugin entry configuration
+ */
+export interface PluginEntryConfig {
+  enabled?: boolean;
+  config?: Record<string, unknown>;
+}
+
+/**
+ * Plugins configuration
+ */
+export interface PluginsConfig {
+  enabled?: boolean;
+  allow?: string[];
+  deny?: string[];
+  entries?: Record<string, PluginEntryConfig>;
+}
+
+/**
  * OpenClaw global configuration structure
  * Based on OpenClaw's actual config schema
  */
@@ -19,6 +37,7 @@ export interface OpenClawGlobalConfig {
       models?: Array<{ id: string; name?: string }>;
     }>;
   };
+  plugins?: PluginsConfig;
 }
 
 export interface SMTPConfig {

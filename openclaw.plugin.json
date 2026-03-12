@@ -95,6 +95,10 @@
                 "type": "string",
                 "description": "Email password or app-specific password"
               },
+              "recipient": {
+                "type": "string",
+                "description": "Recipient email address (defaults to sender if not provided)"
+              },
               "from_name": {
                 "type": "string",
                 "default": "GitHub Trending",
@@ -140,7 +144,8 @@
             "type": "string",
             "description": "Proxy URL (supports http://user:pass@host:port or https://host:port format)"
           }
-        }
+        },
+        "additionalProperties": false
       }
     }
   }

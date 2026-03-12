@@ -95,7 +95,8 @@ openclaw plugins install openclaw-github-trending
               "smtp_host": "smtp.qq.com",
               "smtp_port": 587,
               "sender": "xxx@qq.com",
-              "password": "xxx"
+              "password": "xxx",
+              "recipient": "yyy@qq.com"
             }
           },
           // 可选：开启历史记录功能，用于智能去重
@@ -265,6 +266,7 @@ openclaw cron rm <job-id>
 | `use_tls` | boolean | 否 | `true` | 使用 TLS/STARTTLS |
 | `sender` | string | 是* | - | 发件人邮箱地址 |
 | `password` | string | 是* | - | 邮箱密码或应用专用密码 |
+| `recipient` | string | 否 | 同 `sender` | 收件人邮箱地址（如未配置，默认使用发件人地址） |
 | `from_name` | string | 否 | `"GitHub Trending"` | 发件人显示名称 |
 | `timeout` | number | 否 | `30` | SMTP 连接超时时间（秒） |
 

@@ -41,6 +41,37 @@ export default function (api: any) {
     async execute(args: string[], context: any) {
       const { logger, config: pluginConfig, openclawConfig } = context;
 
+      // Check if plugin is enabled
+      const pluginId = 'openclaw-github-trending';
+      const entryConfig = openclawConfig?.plugins?.entries?.[pluginId];
+      const isEnabled = entryConfig?.enabled ?? true; // Default to enabled if not specified
+
+      fileLogger.info('[CLI] Plugin enabled status check', { pluginId, isEnabled, entryConfigAvailable: !!entryConfig });
+
+      if (!isEnabled) {
+        fileLogger.warn('[CLI] Plugin is disabled, skipping execution');
+        logger?.warn(`Plugin ${pluginId} is disabled`);
+        return {
+          content: [{
+            type: 'text',
+            text: `❌ 插件 ${pluginId} 已禁用，无法执行。\n\n` +
+                  `请在 openclaw.json 中设置：\n` +
+                  `\`\`\`json\n` +
+                  `{\n` +
+                  `  "plugins": {\n` +
+                  `    "entries": {\n` +
+                  `      "${pluginId}": {\n` +
+                  `        "enabled": true,\n` +
+                  `        "config": { ... }\n` +
+                  `      }\n` +
+                  `    }\n` +
+                  `  }\n` +
+                  `}\n\`\`\``
+          }],
+          isError: true
+        };
+      }
+
       fileLogger.info('[CLI] setup-trending command executed', { args, pluginConfigAvailable: !!pluginConfig });
 
       if (args.length < 2) {
@@ -339,7 +370,7 @@ export default function (api: any) {
                   logger?.error(`❌ Feishu push failed: ${result.error || 'Unknown error'}`);
                 }
               } else if (targetChannel === 'email') {
-                const emailTo = toolPluginConfig?.channels?.email?.sender;
+                const emailTo = toolPluginConfig?.channels?.email?.recipient || toolPluginConfig?.channels?.email?.sender;
                 if (!emailTo) {
                   fileLogger.warn('[CLI] Email recipient not configured, skipping');
                   pushResults.push({ channel: 'email', success: false, error: 'Recipient not configured' });
@@ -497,6 +528,18 @@ export default function (api: any) {
     ) {
       const { since, channels, email_to, feishu_webhook } = params;
       const { config: pluginConfig, logger, storage, openclawConfig } = context;
+
+      // Check if plugin is enabled
+      const pluginId = 'openclaw-github-trending';
+      const entryConfig = openclawConfig?.plugins?.entries?.[pluginId];
+      const isEnabled = entryConfig?.enabled ?? true; // Default to enabled if not specified
+
+      fileLogger.info('[Tool Execute] Plugin enabled status check', { pluginId, isEnabled, entryConfigAvailable: !!entryConfig });
+
+      if (!isEnabled) {
+        fileLogger.warn('[Tool Execute] Plugin is disabled, rejecting execution');
+        throw new Error(`插件 ${pluginId} 已禁用，无法执行。请在 openclaw.json 中设置 plugins.entries.${pluginId}.enabled = true`);
+      }
 
       fileLogger.info('[Tool Execute] Starting execution', {
         params,
@@ -719,7 +762,7 @@ export default function (api: any) {
                 safeLogger.error(`❌ Feishu push failed: ${result.error || 'Unknown error'}`);
               }
             } else if (targetChannel === 'email') {
-              const emailTo = email_to || effectiveConfig?.channels?.email?.sender;
+              const emailTo = email_to || effectiveConfig?.channels?.email?.recipient || effectiveConfig?.channels?.email?.sender;
               if (!emailTo) {
                 safeLogger.warn('Email recipient not configured, skipping');
                 pushResults.push({ channel: 'email', success: false, error: 'Recipient not configured' });
@@ -751,7 +794,7 @@ export default function (api: any) {
                   to: emailTo,
                   subject: `GitHub Trending ${since === 'daily' ? 'Daily' : since === 'weekly' ? 'Weekly' : 'Monthly'}`,
                   smtp: {
-                    host: effectiveConfig.channels.email.smtp_host || 'smtp.gmail.com',
+                    host: effectiveConfig.channels.email.smtp_host || 'smtp.qq.com',
                     port: effectiveConfig.channels.email.smtp_port || 587,
                     secure: false,
                     auth: {
