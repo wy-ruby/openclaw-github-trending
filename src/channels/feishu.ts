@@ -1,9 +1,9 @@
 import axios from 'axios';
 import { RepositoryInfo } from '../models/repository';
 import { PushResult } from './types';
-import { FileLogger } from '../core/file-logger';
+import { Logger } from '../utils/logger';
 
-const fileLogger = FileLogger.getInstance();
+const logger = Logger.get('FeishuChannel');
 
 /**
  * Feishu Channel for pushing GitHub trending repositories
@@ -29,7 +29,12 @@ export class FeishuChannel {
       weekday: 'long'
     });
 
-    const sinceText = since === 'daily' ? '当天' : since === 'weekly' ? '本周' : '本月';
+    const sinceTextMap: Record<'daily' | 'weekly' | 'monthly', string> = {
+      daily: '今日',
+      weekly: '本周',
+      monthly: '本月'
+    };
+    const sinceText = sinceTextMap[since];
 
     const elements: any[] = [];
 
@@ -273,7 +278,7 @@ export class FeishuChannel {
     seenRepositories: RepositoryInfo[],
     since: 'daily' | 'weekly' | 'monthly' = 'monthly'
   ): Promise<PushResult> {
-    fileLogger.info('[Feishu Channel] Starting push', {
+    logger.info('Starting push', {
       since,
       newCount: newRepositories.length,
       seenCount: seenRepositories.length,
@@ -289,7 +294,7 @@ export class FeishuChannel {
     };
 
     try {
-      fileLogger.debug('[Feishu Channel] Sending request to webhook...', {
+      logger.debug('Sending request to webhook...', {
         messageSize: JSON.stringify(message).length
       });
 
@@ -301,14 +306,14 @@ export class FeishuChannel {
       });
       const duration = Date.now() - startTime;
 
-      fileLogger.info('[Feishu Channel] Received response', {
+      logger.info('Received response', {
         status: response.status,
         durationMs: duration,
         responseData: response.data
       });
 
       if (response.status === 200 && response.data.code === 0) {
-        fileLogger.info('[Feishu Channel] ✅ Push successful', {
+        logger.success('Push successful', {
           code: response.data.code,
           message: response.data.msg
         });
@@ -319,7 +324,7 @@ export class FeishuChannel {
           error: undefined
         };
       } else {
-        fileLogger.error('[Feishu Channel] ❌ Push failed', {
+        logger.error('Push failed', {
           status: response.status,
           code: response.data.code,
           message: response.data.msg
@@ -331,7 +336,7 @@ export class FeishuChannel {
         };
       }
     } catch (error) {
-      fileLogger.error('[Feishu Channel] ❌ Request failed', {
+      logger.error('Request failed', {
         error: error instanceof Error ? error.message : 'Unknown error',
         stack: error instanceof Error ? error.stack : undefined
       });

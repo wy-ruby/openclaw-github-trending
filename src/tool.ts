@@ -166,6 +166,7 @@ async function githubTrendingHandler(
 
   // Step 5: Push to each channel
   const pushResults: { channel: string; success: boolean; messageId?: string; error?: string }[] = [];
+  const pushLogs: string[] = []; // 收集推送日志
 
   for (const targetChannel of targetChannels) {
     try {
@@ -173,6 +174,7 @@ async function githubTrendingHandler(
         const webhookUrl = feishu_webhook || pluginConfig?.channels?.feishu?.webhook_url;
         if (!webhookUrl) {
           pushResults.push({ channel: 'feishu', success: false, error: 'Feishu webhook URL not provided' });
+          pushLogs.push('[Feishu Channel] ❌ 推送失败: Feishu webhook URL not provided');
           continue;
         }
 
@@ -183,10 +185,12 @@ async function githubTrendingHandler(
           messageId: result.messageId,
           error: result.error
         });
+        pushLogs.push(`[Feishu Channel] ${result.success ? '✅ 推送成功' : '❌ 推送失败'}${result.error ? ': ' + result.error : ''}`);
       } else if (targetChannel === 'email') {
         const emailTo = email_to || pluginConfig?.channels?.email?.recipient || pluginConfig?.channels?.email?.sender;
         if (!emailTo) {
           pushResults.push({ channel: 'email', success: false, error: 'Email recipient not provided' });
+          pushLogs.push('[Email Channel] ❌ 推送失败: Email recipient not provided');
           continue;
         }
 
@@ -199,7 +203,7 @@ async function githubTrendingHandler(
         const internalEmailConfig: EmailSendConfig = {
           from: emailConfig.sender,
           to: emailTo,
-          subject: `GitHub Trending ${since === 'daily' ? 'Daily' : since === 'weekly' ? 'Weekly' : 'Monthly'}`,
+          subject: `GitHub ${since === 'daily' ? '今日' : since === 'weekly' ? '本周' : '本月'}热榜推送`,
           smtp: {
             host: emailConfig.smtp_host,
             port: emailConfig.smtp_port,
@@ -218,6 +222,7 @@ async function githubTrendingHandler(
           messageId: result.messageId,
           error: result.error
         });
+        pushLogs.push(`[Email Channel] ${result.success ? '✅ 推送成功' : '❌ 推送失败'}${result.error ? ': ' + result.error : ''}`);
       }
     } catch (error) {
       pushResults.push({
@@ -225,8 +230,14 @@ async function githubTrendingHandler(
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error'
       });
+      pushLogs.push(`[${targetChannel} Channel] ❌ 推送失败: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
+
+  // 统一输出推送日志在最后
+  console.log('\n========== 推送结果汇总 ==========');
+  pushLogs.forEach(log => console.log(log));
+  console.log('====================================\n');
 
   // Step 6: Return result
   const successCount = pushResults.filter(r => r.success).length;

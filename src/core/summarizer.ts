@@ -2,9 +2,9 @@ import { OpenAI } from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
 import { ResolvedAIConfig } from '../models/config';
 import { RepositoryInfo } from '../models/repository';
-import { FileLogger } from '../core/file-logger';
+import { Logger } from '../utils/logger';
 
-const fileLogger = FileLogger.getInstance();
+const logger = Logger.get('Summarizer');
 
 /**
  * AI Summarizer class
@@ -102,7 +102,7 @@ ${readme_content}
   private async generateSummaryOpenAI(repo: RepositoryInfo): Promise<string> {
     const prompt = this.buildPrompt(repo);
 
-    fileLogger.info('[AI Summarizer] Generating summary using OpenAI', {
+    logger.info('AI Summarizer] Generating summary using OpenAI', {
       fullName: repo.full_name,
       model: this.model,
       provider: this.provider,
@@ -129,7 +129,7 @@ ${readme_content}
       const duration = Date.now() - startTime;
 
       const summary = response.choices[0]?.message?.content || '';
-      fileLogger.info('[AI Summarizer] ✅ Summary generated successfully', {
+      logger.info('AI Summarizer] ✅ Summary generated successfully', {
         fullName: repo.full_name,
         summaryLength: summary.length,
         durationMs: duration,
@@ -138,7 +138,7 @@ ${readme_content}
 
       return summary.trim();
     } catch (error) {
-      fileLogger.error('[AI Summarizer] ❌ Failed to generate summary with OpenAI', {
+      logger.error('AI Summarizer] ❌ Failed to generate summary with OpenAI', {
         fullName: repo.full_name,
         error: error instanceof Error ? error.message : 'Unknown error',
         stack: error instanceof Error ? error.stack : undefined
@@ -155,7 +155,7 @@ ${readme_content}
   private async generateSummaryAnthropic(repo: RepositoryInfo): Promise<string> {
     const prompt = this.buildPrompt(repo);
 
-    fileLogger.info('[AI Summarizer] Generating summary using Anthropic', {
+    logger.info('AI Summarizer] Generating summary using Anthropic', {
       fullName: repo.full_name,
       model: this.model,
       provider: this.provider,
@@ -180,7 +180,7 @@ ${readme_content}
       const firstBlock = response.content[0];
       const summary = firstBlock.type === 'text' ? firstBlock.text : '';
 
-      fileLogger.info('[AI Summarizer] ✅ Summary generated successfully', {
+      logger.info('AI Summarizer] ✅ Summary generated successfully', {
         fullName: repo.full_name,
         summaryLength: summary.length,
         durationMs: duration,
@@ -189,7 +189,7 @@ ${readme_content}
 
       return summary.trim();
     } catch (error) {
-      fileLogger.error('[AI Summarizer] ❌ Failed to generate summary with Anthropic', {
+      logger.error('AI Summarizer] ❌ Failed to generate summary with Anthropic', {
         fullName: repo.full_name,
         error: error instanceof Error ? error.message : 'Unknown error',
         stack: error instanceof Error ? error.stack : undefined
@@ -232,7 +232,7 @@ ${readmeContent}
 
 摘要应该简洁明了,突出重点。`;
 
-    fileLogger.info('[AI Summarizer] Generating README summary using OpenAI', {
+    logger.info('AI Summarizer] Generating README summary using OpenAI', {
       fullName,
       model: this.model,
       provider: this.provider,
@@ -260,7 +260,7 @@ ${readmeContent}
       const duration = Date.now() - startTime;
 
       const summary = response.choices[0]?.message?.content || '';
-      fileLogger.info('[AI Summarizer] ✅ README summary generated successfully', {
+      logger.info('AI Summarizer] ✅ README summary generated successfully', {
         fullName,
         summaryLength: summary.length,
         durationMs: duration,
@@ -269,7 +269,7 @@ ${readmeContent}
 
       return summary.trim();
     } catch (error) {
-      fileLogger.error('[AI Summarizer] ❌ Failed to generate README summary with OpenAI', {
+      logger.error('AI Summarizer] ❌ Failed to generate README summary with OpenAI', {
         fullName,
         error: error instanceof Error ? error.message : 'Unknown error',
         stack: error instanceof Error ? error.stack : undefined
@@ -299,7 +299,7 @@ ${readmeContent}
 
 摘要应该简洁明了,突出重点。`;
 
-    fileLogger.info('[AI Summarizer] Generating README summary using Anthropic', {
+    logger.info('AI Summarizer] Generating README summary using Anthropic', {
       fullName,
       model: this.model,
       provider: this.provider,
@@ -325,7 +325,7 @@ ${readmeContent}
       const firstBlock = response.content[0];
       const summary = firstBlock.type === 'text' ? firstBlock.text : '';
 
-      fileLogger.info('[AI Summarizer] ✅ README summary generated successfully', {
+      logger.info('AI Summarizer] ✅ README summary generated successfully', {
         fullName,
         summaryLength: summary.length,
         durationMs: duration,
@@ -334,7 +334,7 @@ ${readmeContent}
 
       return summary.trim();
     } catch (error) {
-      fileLogger.error('[AI Summarizer] ❌ Failed to generate README summary with Anthropic', {
+      logger.error('AI Summarizer] ❌ Failed to generate README summary with Anthropic', {
         fullName,
         error: error instanceof Error ? error.message : 'Unknown error',
         stack: error instanceof Error ? error.stack : undefined

@@ -1,10 +1,10 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { RepositoryInfo } from '../models/repository';
-import { FileLogger } from '../core/file-logger';
+import { Logger } from '../utils/logger';
 import { PluginConfig } from '../models/config';
 
-const fileLogger = FileLogger.getInstance();
+const logger = Logger.get('Fetcher');
 
 /**
  * GitHub Trending Fetcher
@@ -18,7 +18,7 @@ export class GitHubFetcher {
   constructor(config?: PluginConfig) {
     this.proxyConfig = config?.proxy;
     if (this.proxyConfig?.enabled && this.proxyConfig.url) {
-      fileLogger.info('[GitHub Fetcher] Proxy enabled', {
+      logger.info('GitHub Fetcher] Proxy enabled', {
         proxyUrl: this.proxyConfig.url
       });
     }
@@ -36,7 +36,7 @@ export class GitHubFetcher {
 
     // Apply proxy if enabled
     if (proxyConfig?.enabled && proxyConfig.url) {
-      fileLogger.info('[GitHub Fetcher] Applying proxy to axios', {
+      logger.info('GitHub Fetcher] Applying proxy to axios', {
         proxyUrl: proxyConfig.url
       });
 
@@ -51,14 +51,14 @@ export class GitHubFetcher {
           port: parseInt(port, 10),
           ...(username && password ? { auth: { username, password } } : {})
         };
-        fileLogger.info('[GitHub Fetcher] Proxy configuration applied', {
+        logger.info('GitHub Fetcher] Proxy configuration applied', {
           protocol,
           host,
           port,
           hasAuth: !!username
         });
       } else {
-        fileLogger.warn('[GitHub Fetcher] Invalid proxy URL format, using default axios instance', {
+        logger.warn('GitHub Fetcher] Invalid proxy URL format, using default axios instance', {
           proxyUrl
         });
       }
@@ -188,7 +188,7 @@ export class GitHubFetcher {
 
     const url = `${this.BASE_URL}/trending?since=${since}`;
 
-    fileLogger.info('[GitHub Fetcher] Fetching trending repositories', {
+    logger.info('GitHub Fetcher] Fetching trending repositories', {
       since,
       url,
       proxyConfig: this.proxyConfig,
@@ -200,7 +200,7 @@ export class GitHubFetcher {
       const response = await axiosInstance.get(url);
       const duration = Date.now() - startTime;
 
-      fileLogger.info('[GitHub Fetcher] Got response from GitHub', {
+      logger.info('GitHub Fetcher] Got response from GitHub', {
         status: response.status,
         durationMs: duration,
         dataLength: response.data?.length || 0
@@ -214,15 +214,15 @@ export class GitHubFetcher {
         throw new Error(`Failed to fetch trending page: HTTP ${response.status}`);
       }
 
-      fileLogger.debug('[GitHub Fetcher] Parsing HTML content...');
+      logger.debug('GitHub Fetcher] Parsing HTML content...');
       const repos = this.parseTrendingPage(response.data);
-      fileLogger.info('[GitHub Fetcher] ✅ Successfully parsed trending page', {
+      logger.info('GitHub Fetcher] ✅ Successfully parsed trending page', {
         repoCount: repos.length
       });
 
       return repos;
     } catch (error) {
-      fileLogger.error('[GitHub Fetcher] Failed to fetch trending repositories', {
+      logger.error('GitHub Fetcher] Failed to fetch trending repositories', {
         error: error instanceof Error ? error.message : 'Unknown error',
         stack: error instanceof Error ? error.stack : undefined
       });
@@ -244,7 +244,7 @@ export class GitHubFetcher {
     const readmeFiles = ['README.md', 'README.rst', 'README.txt', 'README'];
     const branches = ['main', 'master'];
 
-    fileLogger.debug('[GitHub Fetcher] Fetching README', {
+    logger.debug('GitHub Fetcher] Fetching README', {
       fullName,
       readmeFiles,
       branches
@@ -263,7 +263,7 @@ export class GitHubFetcher {
           const duration = Date.now() - startTime;
 
           if (response.status === 200 && response.data) {
-            fileLogger.info('[GitHub Fetcher] ✅ README found', {
+            logger.info('GitHub Fetcher] ✅ README found', {
               fullName,
               readmeName,
               branch,
@@ -275,7 +275,7 @@ export class GitHubFetcher {
         } catch (error) {
           // Continue to next combination if this one fails
           if (axios.isAxiosError(error) && error.response?.status === 404) {
-            fileLogger.debug('[GitHub Fetcher] README not found', {
+            logger.debug('GitHub Fetcher] README not found', {
               fullName,
               readmeName,
               branch
@@ -283,7 +283,7 @@ export class GitHubFetcher {
             continue;
           }
           // For other errors, log and continue
-          fileLogger.warn('[GitHub Fetcher] Error fetching README', {
+          logger.warn('GitHub Fetcher] Error fetching README', {
             fullName,
             readmeName,
             branch,
@@ -295,7 +295,7 @@ export class GitHubFetcher {
     }
 
     // No README found in any combination
-    fileLogger.info('[GitHub Fetcher] No README found in any combination', { fullName });
+    logger.info('GitHub Fetcher] No README found in any combination', { fullName });
     return '';
   }
 }

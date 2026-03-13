@@ -2,9 +2,9 @@ import * as markdown from '../utils/markdown';
 import { RepositoryInfo } from '../models/repository';
 import { PushResult } from './types';
 import nodemailer, { Transporter } from 'nodemailer';
-import { FileLogger } from '../core/file-logger';
+import { Logger } from '../utils/logger';
 
-const fileLogger = FileLogger.getInstance();
+const logger = Logger.get('EmailChannel');
 
 /**
  * Email configuration interface
@@ -59,7 +59,12 @@ export class EmailChannel {
     });
 
     // 根据 since 参数确定时间范围描述
-    const sinceText = since === 'daily' ? '当天' : since === 'weekly' ? '本周' : '本月';
+    const sinceTextMap: Record<'daily' | 'weekly' | 'monthly', string> = {
+      daily: '今日',
+      weekly: '本周',
+      monthly: '本月'
+    };
+    const sinceText = sinceTextMap[since];
 
     const NEW_REPOS_TITLE = '新上榜项目';
     const SEEN_REPOS_TITLE = '持续霸榜项目';
@@ -533,7 +538,7 @@ export class EmailChannel {
     seenRepositories: RepositoryInfo[],
     since: 'daily' | 'weekly' | 'monthly' = 'monthly'
   ): Promise<PushResult> {
-    fileLogger.info('[Email Channel] Starting email send', {
+    logger.info('Starting email send', {
       since,
       newCount: newRepositories.length,
       seenCount: seenRepositories.length,
@@ -545,7 +550,7 @@ export class EmailChannel {
     });
 
     try {
-      fileLogger.debug('[Email Channel] Creating SMTP transport...');
+      logger.debug('Creating SMTP transport...');
       const startTime = Date.now();
 
       // Create transport with SMTP configuration
@@ -562,28 +567,28 @@ export class EmailChannel {
       });
 
       const transportCreateTime = Date.now();
-      fileLogger.info('[Email Channel] SMTP transport created', {
+      logger.info('SMTP transport created', {
         durationMs: transportCreateTime - startTime
       });
 
       // Verify SMTP connection
-      fileLogger.debug('[Email Channel] Verifying SMTP connection...');
+      logger.debug('Verifying SMTP connection...');
       const verified = await transport.verify();
       const verifyDuration = Date.now() - transportCreateTime;
-      fileLogger.info('[Email Channel] SMTP connection verified', {
+      logger.info('SMTP connection verified', {
         verified,
         durationMs: verifyDuration
       });
 
       // Generate HTML content
-      fileLogger.debug('[Email Channel] Generating HTML content...');
+      logger.debug('Generating HTML content...');
       const html = EmailChannel.generateHTML(newRepositories, seenRepositories, since);
-      fileLogger.info('[Email Channel] HTML content generated', {
+      logger.info('HTML content generated', {
         htmlSize: html.length
       });
 
       // Send email
-      fileLogger.info('[Email Channel] Sending email...');
+      logger.info('Sending email...');
       const sendStartTime = Date.now();
       const info = await transport.sendMail({
         from: config.from,
@@ -593,7 +598,7 @@ export class EmailChannel {
       });
       const sendDuration = Date.now() - sendStartTime;
 
-      fileLogger.info('[Email Channel] ✅ Email sent successfully', {
+      logger.success('Email sent successfully', {
         messageId: info.messageId,
         accepted: info.accepted,
         rejected: info.rejected,
@@ -607,7 +612,7 @@ export class EmailChannel {
         error: undefined
       };
     } catch (error) {
-      fileLogger.error('[Email Channel] ❌ Email send failed', {
+      logger.error('Email send failed', {
         error: error instanceof Error ? error.message : 'Unknown error',
         stack: error instanceof Error ? error.stack : undefined
       });
