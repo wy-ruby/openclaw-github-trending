@@ -9,6 +9,7 @@ import { RepositoryInfo } from './models/repository';
 import { PluginConfig, GitHubTrendingParams } from './models/config';
 import { PushResult } from './channels/types';
 import { Logger } from './utils/logger';
+import { FileStorageManager, getStorageManager } from './core/file-storage';
 
 const logger = Logger.get('Plugin');
 
@@ -19,7 +20,7 @@ export default function (api: any) {
   } catch (e) {
     logger.warn('api.config not available', { error: e });
   }
-  
+
   // Register CLI command for creating cron jobs or running immediately
   api.registerCli(
     ({ program }: any) => {
@@ -75,8 +76,6 @@ Cron 表达式格式：
           const sinceLower = since.toLowerCase();
           let schedule: string | undefined;
           let channelList: string[] = channels.split(',').map(c => c.trim());
-
-          cliLogger.info('gen-cron command executed', { mode: modeLower, since: sinceLower, schedule, channels: channelList });
 
           // Validate since parameter
           const validSince = ['daily', 'weekly', 'monthly'];
@@ -160,11 +159,60 @@ Cron 表达式格式：
                 hasProxyConfig: !!pluginConfig.proxy
               });
 
+              // Load history data from file storage (fallback to OpenClaw API if available)
+              let historyData = null;
+              try {
+                // Primary: Use file-based storage manager
+                const storageManager = getStorageManager(pluginId);
+                historyData = await storageManager.get('github-trending-history');
+
+                if (historyData) {
+                  cliLogger.info('CLI execution - History data loaded from file storage', {
+                    hasHistory: true,
+                    repoCount: Object.keys(historyData.repositories || {}).length,
+                    storagePath: `~/.openclaw/plugins/${pluginId}/data/${storageManager['getCurrentMonthKey']()}.json`
+                  });
+                } else {
+                  cliLogger.info('CLI execution - No existing history found in file storage');
+                }
+              } catch (storageError) {
+                cliLogger.warn('Failed to load history data from file storage', { error: storageError });
+              }
+
               const result = await githubTrendingTool.githubTrendingTool.handler(
                 toolParams,
                 pluginConfig,
-                openclawConfig
+                openclawConfig,
+                historyData // ✅ 传递历史数据
               );
+
+              // Save history data back to file storage using returned history
+              try {
+                const storageManager = getStorageManager(pluginId);
+
+                // Use history_data returned from handler (contains updated data)
+                if (result.history_data) {
+                  await storageManager.set('github-trending-history', result.history_data);
+                  cliLogger.info('CLI execution - History data saved successfully to file storage', {
+                    repoCount: Object.keys(result.history_data.repositories || {}).length,
+                    pushedCount: result.pushed_count,
+                    newCount: result.new_count
+                  });
+
+                  // Log storage statistics
+                  const stats = await storageManager.getStats();
+                  cliLogger.info('Storage statistics', {
+                    currentMonth: stats.currentMonth,
+                    currentMonthSize: stats.currentMonthSize,
+                    totalMonths: stats.totalMonths,
+                    totalSize: stats.totalSize
+                  });
+                } else {
+                  cliLogger.warn('CLI execution - No history_data returned from handler');
+                }
+              } catch (saveError) {
+                cliLogger.warn('Failed to save history data to file storage', { error: saveError });
+              }
 
               if (result.success) {
                 console.log(`✅ 执行成功！`);
@@ -191,7 +239,6 @@ Cron 表达式格式：
           } else {
             // Cron scheduling mode
             schedule = mode;
-            cliLogger.info('Creating cron job', { since: sinceLower, schedule, channels: channelList });
 
             console.log(`📅 正在创建定时任务...`);
             console.log(`   热榜周期：${sinceLower === 'daily' ? '每日' : sinceLower === 'weekly' ? '每周' : '每月'}`);
@@ -583,8 +630,23 @@ Cron 表达式格式：
 
         // Update history
         historyManager.markPushed(reposWithSummary);
+
+        // Save to both OpenClaw storage and file storage (for redundancy)
         if (storage) {
           await storage.set('github-trending-history', historyManager.exportData());
+          safeLogger.info('History saved to OpenClaw storage');
+        }
+
+        // Also save to file storage as backup
+        try {
+          const storageManager = getStorageManager(pluginId);
+          await storageManager.set('github-trending-history', historyManager.exportData());
+          safeLogger.info('History saved to file storage', {
+            path: `~/.openclaw/plugins/${pluginId}/data/${storageManager['getCurrentMonthKey']()}.json`,
+            repoCount: Object.keys(historyManager['data'].repositories).length
+          });
+        } catch (fileStorageError) {
+          safeLogger.warn('Failed to save history to file storage', { error: fileStorageError });
         }
 
         // Calculate result statistics

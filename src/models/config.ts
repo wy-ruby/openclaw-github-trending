@@ -97,4 +97,5 @@ export interface GitHubTrendingResult {
   pushed_to: string;
   timestamp: string;
   message: string;
+  history_data?: any; // History data for persistence
 }

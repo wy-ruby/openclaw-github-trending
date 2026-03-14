@@ -204,6 +204,63 @@ openclaw cron add --name "GitHub Trending Weekly Feishu+Email" \
   --system-event '{"tool":"openclaw-github-trending","params":{"since":"weekly","channels":["feishu","email"]}}'
 ```
 
+#### 🗣️ Natural Language Task Creation
+
+**Create scheduled tasks through natural conversation with OpenClaw**, without memorizing complex command formats. The plugin supports intelligent parsing of natural language instructions to automatically generate and execute scheduled tasks.
+
+**Usage:**
+
+Simply describe your needs in natural language in the OpenClaw chat interface:
+
+```
+Help me create a scheduled task that pushes GitHub monthly trending to my email every day at 18:45
+```
+
+**Supported Natural Language Examples:**
+
+```text
+// Daily Push
+- "Help me create a task to push GitHub daily trending to my email every morning at 8:00"
+- "I want to receive GitHub daily trending in my email every day at 18:45"
+- "Create a scheduled task: fetch daily trending every day at 9:00 AM and push to Feishu"
+
+// Weekly Push
+- "Help me create a task to push GitHub weekly trending to Feishu every Monday at 10:00"
+- "I want to receive weekly trending in Feishu and email every Friday at 18:00"
+- "Fetch weekly trending every Wednesday morning at 9:00 AM and push to Feishu"
+
+// Monthly Push
+- "Help me create a task to push GitHub monthly trending to my email on the 1st of every month at 9:00"
+- "I want to receive GitHub monthly trending in my email on the 15th of every month at 18:45"
+- "Help me use the openclaw-github-trending tool to create a scheduled task that runs every day at 18:45, pushes monthly GitHub trending, and sends the content to my email"
+
+// Multi-Channel Push
+- "Help me create a task to push daily trending to both Feishu and email every day at 8:00"
+- "I want to receive trending every day at 10:00, sent to both Feishu and my email"
+```
+
+**Intelligent Parsing Capabilities:**
+
+✅ **Time Recognition**: Automatically parses time expressions like "every day at 8:00", "every Monday at 10:00", "1st of every month at 9:00"
+✅ **Period Recognition**: Automatically identifies "today/daily"→`daily`, "this week/weekly"→`weekly`, "monthly"→`monthly`
+✅ **Channel Recognition**: Automatically identifies "email"→`email`, "feishu"→`feishu`, "feishu and email"→`["feishu","email"]`
+✅ **Task Creation**: Automatically generates appropriate Cron expressions and creates scheduled tasks
+
+**Execution Flow:**
+
+1. User inputs natural language instruction in OpenClaw chat
+2. OpenClaw parses the instruction and identifies the tool (`openclaw-github-trending`)
+3. Automatically extracts time, period, push channels, and other parameters
+4. Generates the corresponding `cron add` command and creates the task
+5. Returns task creation success information, including task ID and execution time
+
+**Advantages:**
+
+✨ **Easy to Use**: No need to memorize command formats, create tasks like chatting
+✨ **Flexible Expression**: Supports multiple natural language expression styles
+✨ **Intelligent Recognition**: Automatically parses time, period, and push channels
+✨ **Quick Configuration**: Complete complex scheduled task configuration with one sentence
+
 ### View Command Help
 
 When you run the command without parameters or with wrong parameters, detailed help information will be displayed automatically:

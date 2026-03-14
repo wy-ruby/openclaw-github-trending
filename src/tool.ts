@@ -66,16 +66,44 @@ async function processRepositoriesWithAI(
 ): Promise<RepositoryInfo[]> {
   const results: RepositoryInfo[] = [];
 
+  // Use configured max workers, cap at 10 to avoid overwhelming the API
+  const actualMaxWorkers = Math.min(maxWorkers, 10);
+
   // Process in batches to limit concurrency
-  for (let i = 0; i < repositories.length; i += maxWorkers) {
-    const batch = repositories.slice(i, i + maxWorkers);
-    const batchResults = await Promise.all(
+  for (let i = 0; i < repositories.length; i += actualMaxWorkers) {
+    const batch = repositories.slice(i, i + actualMaxWorkers);
+
+    console.log(`[AI Summarizer] Processing batch ${Math.floor(i / actualMaxWorkers) + 1}/${Math.ceil(repositories.length / actualMaxWorkers)} (${batch.length} repos with ${actualMaxWorkers} workers)...`);
+
+    // Use Promise.allSettled to handle individual failures gracefully
+    const batchResults = await Promise.allSettled(
       batch.map(async (repo: RepositoryInfo) => {
-        const summary = await summarizer.generateSummary(repo);
-        return { ...repo, ai_summary: summary };
+        try {
+          // Add timeout for each summary request (3 minutes max to match OpenClaw CLI limit)
+          const startTime = Date.now();
+          const summary = await Promise.race([
+            summarizer.generateSummary(repo),
+            new Promise<string>((_, reject) =>
+              setTimeout(() => reject(new Error('Summary timeout')), 180000)
+            )
+          ]);
+          const duration = Date.now() - startTime;
+
+          console.log(`✅ ${repo.full_name} summary generated (${duration}ms, ${summary.length} chars)`);
+          return { ...repo, ai_summary: summary };
+        } catch (error) {
+          console.log(`⚠️  ${repo.full_name} 摘要生成失败：${error instanceof Error ? error.message : 'Unknown error'}`);
+          return { ...repo, ai_summary: '' };
+        }
       })
     );
-    results.push(...batchResults);
+
+    // Collect successful results
+    for (const result of batchResults) {
+      if (result.status === 'fulfilled') {
+        results.push(result.value);
+      }
+    }
   }
 
   return results;
@@ -142,37 +170,94 @@ async function githubTrendingHandler(
     historyManager.importData(historyData);
   }
 
-  // Categorize repositories
+  // Categorize repositories with proper history config from plugin
   const historyConfig = {
     enabled: pluginConfig?.history?.enabled ?? true,
     star_threshold: pluginConfig?.history?.star_threshold ?? 100
   };
+
+  const historyStatsBefore = historyManager.getStats();
+  console.log('[History Manager] Configuration:', JSON.stringify(historyConfig, null, 2));
+  console.log('[History Manager] History loaded from storage:', historyData ? '✅ Yes' : '❌ No');
+  console.log('[History Manager] Total repositories in history:', Object.keys(historyManager['data'].repositories).length);
+  console.log('[History Manager] Statistics before processing:');
+  console.log(`  - Total repositories tracked: ${historyStatsBefore.total_repositories}`);
+  console.log(`  - Total pushes: ${historyStatsBefore.total_pushes}`);
+  console.log(`  - Oldest entry: ${historyStatsBefore.oldest_entry || 'N/A'}`);
+  console.log(`  - Newest entry: ${historyStatsBefore.newest_entry || 'N/A'}`);
+
   const { newlySeen, shouldPush, alreadySeen } = historyManager.categorizeRepositories(
     repositories,
     historyConfig
   );
 
-  // Step 4: Generate AI summaries for repositories to push
+  console.log(`[History Manager] Results - New: ${newlySeen.length}, Should Push: ${shouldPush.length}, Already Seen: ${alreadySeen.length}`);
+  if (newlySeen.length > 0) {
+    console.log('[History Manager] Newly seen repositories:');
+    newlySeen.forEach((repo, i) => console.log(`  ${i + 1}. ${repo.full_name} (${repo.stars} stars)`));
+  }
+  if (alreadySeen.length > 0) {
+    console.log('[History Manager] Already seen repositories:');
+    alreadySeen.forEach((repo, i) => {
+      const history = historyManager.getProject(repo.full_name);
+      const starsDiff = repo.stars - (history?.last_stars || 0);
+      console.log(`  ${i + 1}. ${repo.full_name} (${repo.stars} stars, +${starsDiff} since last push)`);
+    });
+  }
+
+  // Step 4: Get max workers from config and generate AI summaries for repositories to push
+  const maxWorkers = ConfigManager.getMaxWorkers(pluginConfig);
+  console.log(`[AI Summarizer] Using ${maxWorkers} concurrent workers for ${shouldPush.length} repositories`);
+
   let processedRepositories: RepositoryInfo[] = [];
+  const startTime = Date.now();
+
   try {
-    processedRepositories = await processRepositoriesWithAI(shouldPush, summarizer);
+    processedRepositories = await processRepositoriesWithAI(shouldPush, summarizer, maxWorkers);
   } catch (error) {
     // Continue with empty summaries if AI processing fails
     processedRepositories = shouldPush.map((r: RepositoryInfo) => ({ ...r, ai_summary: '' }));
   }
 
+  const summaryDuration = Date.now() - startTime;
+  console.log(`[AI Summarizer] ✅ All summaries generated in ${summaryDuration}ms (${summaryDuration / shouldPush.length}ms per repo on average)`);
+
   // Update history
   historyManager.markPushed(processedRepositories);
 
-  // Prepare seen repositories with AI summaries
-  const seenReposWithSummary = alreadySeen.map((r: RepositoryInfo) => ({
-    ...r,
-    ai_summary: historyManager.getProject(r.full_name)?.ai_summary || ''
-  }));
+  // Prepare seen repositories with AI summaries from history (skip AI generation)
+  const seenReposWithSummary = alreadySeen.map((r: RepositoryInfo) => {
+    const history = historyManager.getProject(r.full_name);
+    const summary = history?.ai_summary || '';
+    if (summary) {
+      console.log(`[History Manager] ✅ Using cached summary for ${r.full_name} (${summary.length} chars)`);
+    } else {
+      console.log(`[History Manager] ⚠️  No cached summary for ${r.full_name}`);
+    }
+    return {
+      ...r,
+      ai_summary: summary
+    };
+  });
+
+  // Display summary statistics
+  console.log(`\n[Summary Statistics]`);
+  console.log(`  - New repositories processed with AI: ${processedRepositories.length}`);
+  console.log(`  - Already seen repositories (using cached summaries): ${alreadySeen.length}`);
+  console.log(`  - Total repositories to push: ${processedRepositories.length}`);
+  console.log(`  - Total repositories shown: ${processedRepositories.length + alreadySeen.length}`);
 
   // Step 5: Push to each channel
   const pushResults: { channel: string; success: boolean; messageId?: string; error?: string }[] = [];
   const pushLogs: string[] = []; // 收集推送日志
+
+  // Display history statistics
+  const historyStats = historyManager.getStats();
+  console.log('\n[History Statistics]');
+  console.log(`  - Total repositories tracked: ${historyStats.total_repositories}`);
+  console.log(`  - Total pushes: ${historyStats.total_pushes}`);
+  console.log(`  - Oldest entry: ${historyStats.oldest_entry || 'N/A'}`);
+  console.log(`  - Newest entry: ${historyStats.newest_entry || 'N/A'}`);
 
   for (const targetChannel of targetChannels) {
     try {
@@ -276,9 +361,13 @@ async function githubTrendingHandler(
     total_count: repositories.length,
     pushed_to: successChannels.join(','),
     timestamp: new Date().toISOString(),
-    message
+    message,
+    history_data: historyManager.exportData() // Return updated history for persistence
   };
 }
+
+// Export history manager for persistence
+export { HistoryManager };
 
 /**
  * Export the GitHub Trending Tool
