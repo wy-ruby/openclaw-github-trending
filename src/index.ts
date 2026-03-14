@@ -13,13 +13,9 @@ import { Logger } from './utils/logger';
 const logger = Logger.get('Plugin');
 
 export default function (api: any) {
-  logger.info('Starting GitHub Trending plugin registration...');
-
-  // Store api.config for later use in tool execution
   let openclawConfigFromApi: any = null;
   try {
     openclawConfigFromApi = api.config;
-    logger.info('api.config available', { hasConfig: !!openclawConfigFromApi });
   } catch (e) {
     logger.warn('api.config not available', { error: e });
   }
@@ -28,87 +24,142 @@ export default function (api: any) {
   api.registerCli(
     ({ program }: any) => {
       program
-        .command('setup-trending <mode> <since> [args...]')
-        .description('Setup GitHub trending cron job or run immediately. Mode: "now" for immediate, "cron" for scheduled')
-        .option('--schedule <cron>', 'Cron expression (e.g., "0 10 * * 3" for Wed 10:00)')
-        .option('--email-to <email>', 'Override email recipient')
-        .option('--feishu-webhook <url>', 'Override Feishu webhook URL')
-        .action(async (mode: string, since: string, args: string[], options: any) => {
+        .command('gen-cron <mode> <since> <channels>')
+        .description('生成 GitHub 热榜定时任务或立即执行')
+        .addHelpText('after', `
+参数说明：
+  mode      执行模式
+            - "now" 表示立即执行
+            - Cron 表达式（格式：分 时 日 月 周）表示定时执行
+
+  since     热榜周期
+            - daily   今日热榜
+            - weekly  本周热榜
+            - monthly 本月热榜
+
+  channels  推送渠道（多个渠道用逗号分隔）
+            - email    推送到邮箱
+            - feishu   推送到飞书
+            - email,feishu  同时推送到邮箱和飞书
+
+Cron 表达式格式：
+  格式：分(0-59) 时(0-23) 日(1-31) 月(1-12) 周(0-7, 0和7都是周日)
+  时区：使用服务器本地时间
+
+常用 Cron 示例：
+  "0 8 * * *"    - 每天 8:00
+  "0 10 * * 3"   - 每周三 10:00
+  "0 9 1 * *"    - 每月 1 号 9:00
+
+示例：
+  # 立即执行：获取今日热榜并推送到飞书和邮箱
+  openclaw gen-cron now daily email,feishu
+
+  # 创建定时任务：每周三 10:00 获取本周热榜并推送到飞书
+  openclaw gen-cron "0 10 * * 3" weekly feishu
+
+  # 创建定时任务：每月 1 号 9:00 获取本月热榜并推送到邮箱和飞书
+  openclaw gen-cron "0 9 1 * *" monthly email,feishu
+
+  # 创建定时任务：每天早上 8:00 获取今日热榜并推送到邮箱
+  openclaw gen-cron "0 8 * * *" daily email
+
+提示：
+  - 推送渠道需要在 ~/.openclaw/openclaw.json 中配置
+`)
+        .action(async (mode: string, since: string, channels: string) => {
           const cliLogger = Logger.get('CLI');
           const pluginId = 'openclaw-github-trending';
-          
-          let schedule: string | undefined;
-          let channelList: string[] = [];
 
-          // Parse args based on mode
           const modeLower = mode.toLowerCase();
           const sinceLower = since.toLowerCase();
+          let schedule: string | undefined;
+          let channelList: string[] = channels.split(',').map(c => c.trim());
 
-          if (modeLower === 'now') {
-            // For "now" mode: args are channels
-            channelList = args;
-            if (args.length === 1 && args[0].includes(',')) {
-              channelList = args[0].split(',').map((c: string) => c.trim());
-            }
-          } else if (modeLower === 'cron') {
-            // For "cron" mode: first arg is schedule, rest are channels
-            if (args.length < 1) {
-              console.error(`❌ 错误：cron 模式需要 cron 表达式`);
-              console.error(`示例：openclaw setup-trending cron weekly "0 10 * * 3" feishu,email`);
-              process.exit(1);
-            }
-            schedule = args[0];
-            channelList = args.slice(1);
-            if (channelList.length === 1 && channelList[0].includes(',')) {
-              channelList = channelList[0].split(',').map((c: string) => c.trim());
-            }
-          }
-
-          cliLogger.info('setup-trending command executed', { mode: modeLower, since: sinceLower, schedule, channels: channelList, options });
+          cliLogger.info('gen-cron command executed', { mode: modeLower, since: sinceLower, schedule, channels: channelList });
 
           // Validate since parameter
           const validSince = ['daily', 'weekly', 'monthly'];
           if (!validSince.includes(sinceLower)) {
-            console.error(`❌ 错误：since 参数必须是 ${validSince.join(', ')} 之一`);
-            console.error(`\n用法:`);
-            console.error(`  openclaw setup-trending now <since> [channels...]                    # 立即执行`);
-            console.error(`  openclaw setup-trending cron <since> "<cron>" [channels...]           # 创建定时任务`);
-            console.error(`\n示例:`);
-            console.error(`  openclaw setup-trending now daily feishu,email                        # 立即执行`);
-            console.error(`  openclaw setup-trending cron weekly "0 10 * * 3" email,feishu         # 每周三 10:00`);
-            console.error(`  openclaw setup-trending cron monthly "0 9 1 * *" feishu               # 每月 1 号 9:00`);
-            console.error(`\n选项:`);
-            console.error(`  --email-to <email>        覆盖默认邮箱`);
-            console.error(`  --feishu-webhook <url>    覆盖默认飞书 webhook`);
+            console.error(``);
+            console.error(`❌ 错误：since 参数必须是 ${validSince.join('、')} 之一`);
+            console.error(``);
+            console.error(`📌 命令用法：`);
+            console.error(`   openclaw gen-cron <mode> <since> <channels>`);
+            console.error(``);
+            console.error(`📘 参数说明：`);
+            console.error(`   mode      : 执行模式 - "now" 表示立即执行，或 Cron 表达式（格式：分 时 日 月 周）`);
+            console.error(`   since     : 热榜周期 - "daily"（今日）、"weekly"（本周）、"monthly"（本月）`);
+            console.error(`   channels  : 推送渠道 - "email"、"feishu" 或 "email,feishu"（多个渠道用逗号分隔）`);
+            console.error(``);
+            console.error(`📋 示例：`);
+            console.error(`   # 立即执行：获取今日热榜并推送到飞书和邮箱`);
+            console.error(`   openclaw gen-cron now daily email,feishu`);
+            console.error(``);
+            console.error(`   # 创建定时任务：每周三 10:00 获取本周热榜并推送到飞书`);
+            console.error(`   openclaw gen-cron "0 10 * * 3" weekly feishu`);
+            console.error(``);
+            console.error(`   # 创建定时任务：每月 1 号 9:00 获取本月热榜并推送到邮箱和飞书`);
+            console.error(`   openclaw gen-cron "0 9 1 * *" monthly email,feishu`);
+            console.error(``);
+            console.error(`   # 创建定时任务：每天早上 8:00 获取今日热榜并推送到邮箱`);
+            console.error(`   openclaw gen-cron "0 8 * * *" daily email`);
+            console.error(``);
+            console.error(`💡 提示：`);
+            console.error(`   - Cron 表达式格式：分(0-59) 时(0-23) 日(1-31) 月(1-12) 周(0-7, 0和7都是周日)`);
+            console.error(`   - 常用示例：`);
+            console.error(`     "0 8 * * *"   - 每天 8:00`);
+            console.error(`     "0 10 * * 3"  - 每周三 10:00`);
+            console.error(`     "0 9 1 * *"   - 每月 1 号 9:00`);
+            console.error(`   - 推送渠道需要在 ~/.openclaw/openclaw.json 中配置`);
+            console.error(``);
             process.exit(1);
           }
 
-          // Check mode: immediate execution or cron scheduling
+          // Validate channels
+          const validChannels = ['email', 'feishu'];
+          const invalidChannels = channelList.filter(c => !validChannels.includes(c));
+          if (invalidChannels.length > 0) {
+            console.error(``);
+            console.error(`❌ 错误：无效的渠道 "${invalidChannels.join(', ')}"`);
+            console.error(``);
+            console.error(`📌 可用渠道：${validChannels.join('、')}`);
+            console.error(``);
+            process.exit(1);
+          }
+
           if (modeLower === 'now') {
+            // Immediate execution mode
             cliLogger.info('Running immediately', { since: sinceLower, channels: channelList });
-            
-            // Show clean, user-friendly output
+
+            console.log(``);
             console.log(`🚀 正在获取 GitHub ${sinceLower === 'daily' ? '今日' : sinceLower === 'weekly' ? '本周' : '本月'} 热榜项目...`);
-            console.log(`📬 结果将推送到：${channelList.includes('feishu') ? '飞书' : ''}${channelList.includes('feishu') && channelList.includes('email') ? ' 和 ' : ''}${channelList.includes('email') ? '邮箱' : ''}`);
-            console.log('');
-            console.log('⏳ 抓取热榜项目并让 AI 进行总结可能需要 1-3 分钟，请稍后...');
-            console.log('');
+            console.log(`📬 推送渠道：${channelList.map(c => c === 'feishu' ? '🚀 飞书' : '📧 邮箱').join(' + ')}`);
+            console.log(``);
+            console.log(`⏳ 抓取热榜项目并让 AI 进行总结可能需要 1-3 分钟，请稍候...`);
+            console.log(``);
 
             // Import and call the tool execute function directly
             const githubTrendingTool = await import('./tool');
-            
+
             const toolParams: any = {
               since: sinceLower,
               channels: channelList
             };
-            if (options.emailTo) toolParams.email_to = options.emailTo;
-            if (options.feishuWebhook) toolParams.feishu_webhook = options.feishuWebhook;
 
             try {
-              // Get plugin config from api
-              const pluginConfig = api.config?.plugins?.entries?.[pluginId]?.config || {};
+              // Get plugin config from api - use the same way as registerTool does
+              const pluginEntryConfig = api.config?.plugins?.entries?.[pluginId];
+              const pluginConfig = pluginEntryConfig?.config || {};
               const openclawConfig = api.config || {};
-              
+
+              cliLogger.info('CLI execution - Plugin config loaded', {
+                pluginId,
+                pluginConfigAvailable: Object.keys(pluginConfig).length > 0,
+                pluginConfigKeys: Object.keys(pluginConfig),
+                hasProxyConfig: !!pluginConfig.proxy
+              });
+
               const result = await githubTrendingTool.githubTrendingTool.handler(
                 toolParams,
                 pluginConfig,
@@ -116,74 +167,77 @@ export default function (api: any) {
               );
 
               if (result.success) {
-                console.log('✅ 执行成功！');
+                console.log(`✅ 执行成功！`);
                 console.log(`   已推送 ${result.pushed_count} 个热榜项目`);
                 console.log(`   新项目：${result.new_count} 个`);
                 console.log(`   已见过：${result.seen_count} 个`);
-                console.log('');
-                console.log(`📬 请留意您的${channelList.includes('feishu') ? '飞书' : ''}${channelList.includes('feishu') && channelList.includes('email') ? '和' : ''}${channelList.includes('email') ? '邮箱' : ''}，查看详细推送内容。`);
+                console.log(``);
+                console.log(`📬 请查看您的 ${channelList.map(c => c === 'feishu' ? '飞书' : '邮箱').join(' 和 ')}，查看详细推送内容。`);
+                console.log(``);
                 process.exit(0);
               } else {
                 console.error(`❌ 执行失败：${result.message}`);
+                console.error(``);
                 process.exit(1);
               }
             } catch (error: any) {
               cliLogger.error('Execution failed', { error: error.message, stack: error.stack });
               console.error(`❌ 执行出错：${error.message}`);
-              console.error('');
-              console.error('详细日志已记录到：~/.openclaw/logs/github-trending/');
+              console.error(``);
+              console.error(`📄 详细日志已记录到：~/.openclaw/logs/github-trending/`);
+              console.error(``);
               process.exit(1);
             }
-          } else if (modeLower === 'cron') {
+          } else {
+            // Cron scheduling mode
+            schedule = mode;
             cliLogger.info('Creating cron job', { since: sinceLower, schedule, channels: channelList });
-            
+
             console.log(`📅 正在创建定时任务...`);
             console.log(`   热榜周期：${sinceLower === 'daily' ? '每日' : sinceLower === 'weekly' ? '每周' : '每月'}`);
             console.log(`   执行时间：${schedule}`);
-            console.log(`   推送渠道：${channelList.join(', ')}`);
-            console.log('');
+            console.log(`   推送渠道：${channelList.map(c => c === 'feishu' ? '🚀 飞书' : '📧 邮箱').join(' + ')}`);
+            console.log(``);
 
             // Build tool params for cron job
             const toolParams: any = { since: sinceLower, channels: channelList };
-            if (options.emailTo) toolParams.email_to = options.emailTo;
-            if (options.feishuWebhook) toolParams.feishu_webhook = options.feishuWebhook;
-            
+
             // Create cron job using openclaw cron add command
-            const jobName = `GitHub Trending ${sinceLower} (${channelList.join(',')})`;
+            const periodLabel = sinceLower === 'daily' ? '每日' : sinceLower === 'weekly' ? '每周' : '每月';
+            const channelLabel = channelList.map(c => c === 'feishu' ? '飞书' : '邮箱').join('+');
+            const jobName = `GitHub 热榜 ${periodLabel} ${channelLabel}`;
             const cronCmd = `openclaw cron add --name "${jobName}" --cron "${schedule}" --system-event '${JSON.stringify({tool: "openclaw-github-trending", params: toolParams})}'`;
-            
+
             const { exec } = await import('child_process');
             try {
-              const result = await new Promise((resolve, reject) => {
+              await new Promise((resolve, reject) => {
                 exec(cronCmd, (error, stdout, stderr) => {
                   if (error) reject(error);
                   else resolve({ stdout, stderr });
                 });
               });
               console.log(`✅ 定时任务创建成功！`);
-              console.log(`   任务将按以下时间执行：${schedule}`);
+              console.log(``);
+              console.log(`📌 任务信息：`);
+              console.log(`   执行时间：${schedule}`);
               console.log(`   执行内容：抓取 GitHub ${sinceLower === 'daily' ? '今日' : sinceLower === 'weekly' ? '本周' : '本月'} 热榜`);
-              console.log(`   推送渠道：${channelList.join(', ')}`);
-              console.log('');
-              console.log(`管理任务：`);
-              console.log(`  openclaw cron list          # 查看所有任务`);
-              console.log(`  openclaw cron remove <id>   # 删除任务`);
-              console.log(`  openclaw cron run <id>      # 手动执行任务`);
+              console.log(`   推送渠道：${channelList.map(c => c === 'feishu' ? '🚀 飞书' : '📧 邮箱').join(' + ')}`);
+              console.log(``);
+              console.log(`⚙️  管理任务：`);
+              console.log(`   openclaw cron list          # 👀 查看所有定时任务`);
+              console.log(`   openclaw cron run <id>      # ▶️  立即手动执行任务`);
+              console.log(`   openclaw cron remove <id>   # 🗑️  删除任务`);
+              console.log(``);
               process.exit(0);
             } catch (error: any) {
               console.error(`❌ 创建任务失败：${error.message}`);
-              console.error(`输出：${error.stdout || ''}`);
-              console.error(`错误：${error.stderr || ''}`);
+              console.error(``);
               process.exit(1);
             }
-          } else {
-            console.error(`❌ 错误：mode 必须是 "now" 或 "cron"`);
-            console.error(`用法：openclaw setup-trending <now|cron> <since> [args...]`);
-            process.exit(1);
           }
         });
     },
-    { commands: ['setup-trending'] }
+    { commands: ['gen-cron'] }
   );
 
   // Register the tool
@@ -590,6 +644,4 @@ export default function (api: any) {
       }
     }
   });
-
-  logger.info('GitHub Trending plugin registration complete');
 }

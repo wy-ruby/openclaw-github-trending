@@ -90,6 +90,12 @@ async function githubTrendingHandler(
   openclawConfig: OpenClawGlobalConfig = {},
   historyData?: any
 ): Promise<GitHubTrendingResult> {
+  console.log('\n[GitHub Trending Tool] Handler called');
+  console.log('[GitHub Trending Tool] pluginConfig:', JSON.stringify(pluginConfig, null, 2));
+  console.log('[GitHub Trending Tool] pluginConfig.proxy:', pluginConfig.proxy);
+  console.log('[GitHub Trending Tool] params:', params);
+  console.log('[GitHub Trending Tool] openclawConfig available:', !!openclawConfig);
+
   const { since, channels, email_to, feishu_webhook } = params;
 
   // 解析通道配置（仅使用 channels 参数）
@@ -112,7 +118,7 @@ async function githubTrendingHandler(
   const summarizer = new AISummarizer(aiConfig);
 
   // Step 2: Initialize fetcher and fetch trending repositories
-  const fetcher = new GitHubFetcher();
+  const fetcher = new GitHubFetcher(pluginConfig);
   let repositories: RepositoryInfo[];
 
   try {

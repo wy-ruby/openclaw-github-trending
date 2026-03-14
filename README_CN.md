@@ -148,39 +148,76 @@ openclaw plugins install openclaw-github-trending
    - 你应该会在飞书聊天中看到这条消息。
 
 
-### 3. 设置定时任务（推荐）
-参数说明：
-* 参数一：daily、weekly、monthly代表是获取今日、本周或本月热榜项目。
-* 参数二：后面的时间是执行时间，格式为HH:mm，例如9:00表示9:00 AM，10:30表示10:30 AM。
-* 参数三：是通知的渠道，只有你配置了该渠道才可以推送到该渠道上。可以指定多个推送渠道，用逗号隔开。
-使用注册的 `/setup-trending` CLI 命令快速设置定时任务。只需在 OpenClaw 聊天中输入命令即可：
+### 3. 设置定时任务或立即执行
+
+使用注册的 `gen-cron` CLI 命令快速设置定时任务或立即执行。在**命令行中**执行以下命令：
 
 ```
-/setup-trending daily 9:00 feishu
-/setup-trending daily 9:00 email
-/setup-trending daily 9:00 feishu,email
-/setup-trending monthly 8:00 feishu,email
+# 立即执行：获取今日热榜并推送到飞书和邮箱
+openclaw gen-cron now daily email,feishu
+
+# 创建定时任务：每周三 10:00 获取本周热榜并推送到飞书
+openclaw gen-cron "0 10 * * 3" weekly feishu
+
+# 创建定时任务：每月 1 号 9:00 获取本月热榜并推送到邮箱和飞书
+openclaw gen-cron "0 9 1 * *" monthly email,feishu
+
+# 创建定时任务：每天早上 8:00 获取今日热榜并推送到邮箱
+openclaw gen-cron "0 8 * * *" daily email
 ```
 
-**时间格式说明**: 时间使用**北京时间 (CST/UTC+8)**, 所以 `9:00` 表示北京时间上午 9:00。
+**命令参数说明：**
 
-#### 快速测试（仅执行一次）
+```
+openclaw gen-cron <mode> <since> <channels>
+```
 
-如果只想测试一次看看效果，不设置定时任务：
+| 参数 | 说明 | 示例 |
+|------|------|------|
+| `mode` | 执行模式：`now` 表示立即执行，或 Cron 表达式（格式：分 时 日 月 周） | `now` <br> `"0 10 * * 3"` |
+| `since` | 热榜周期：`daily`（今日）、`weekly`（本周）、`monthly`（本月） | `daily` |
+| `channels` | 推送渠道：`email`、`feishu` 或 `email,feishu`（多个渠道用逗号分隔） | `email,feishu` |
+
+**Cron 表达式格式：**
+- 格式：`分(0-59) 时(0-23) 日(1-31) 月(1-12) 周(0-7, 0和7都是周日)`
+- 时区：**使用服务器本地时间**（通常为系统时间）
+
+**常用 Cron 示例：**
+- `"0 8 * * *"` - 每天 8:00
+- `"0 10 * * 3"` - 每周三 10:00
+- `"0 9 1 * *"` - 每月 1 号 9:00
+
+> ⚠️ **注意**：`gen-cron` 命令**必须在命令行中执行**，不能在 OpenClaw 聊天界面中使用。
+>
+> - **命令行**：直接在终端执行 `openclaw gen-cron ...`
+> - **OpenClaw 聊天**：如需在聊天中执行，需要使用完整的 `openclaw cron add` 命令（见下方）
+
+#### 在 OpenClaw 聊天中设置任务
+
+如果想在 OpenClaw 聊天界面中设置任务，使用完整的 `cron add` 命令：
 
 ```bash
-# 在 OpenClaw 聊天中执行直接粘贴以下指令。
-/setup-trending daily now feishu,email
+# 在 OpenClaw 聊天中粘贴以下命令（需要先转义引号）
 
-# 或者直接在命令行中执行以下指令，可以在某个时间点去发送。
-openclaw cron add --name "测试插件执行" \
-  --at "2026-03-12T11:42:00Z" \
-  --system-event '{"tool":"openclaw-github-trending","params":{"since":"daily","channels":["feishu", "email"]}}' \
-  --wake now \
-  --delete-after-run
+# 每周三 10:00 获取本周热榜并推送到飞书和邮箱
+openclaw cron add --name "GitHub 热榜 每周 飞书+邮箱" \
+  --cron "0 10 * * 3" \
+  --system-event '{"tool":"openclaw-github-trending","params":{"since":"weekly","channels":["feishu","email"]}}'
 ```
 
-**注意**: `--at` 时间格式为 **UTC**。北京时间需要加 8 小时（例如：北京时间 9:00 AM = UTC 时间 01:00 AM）。
+### 查看命令帮助
+
+运行命令时如果不带参数或参数错误，会自动显示详细的帮助信息：
+
+```bash
+openclaw gen-cron -h
+```
+
+输出将包含：
+- 命令用法
+- 参数说明
+- 使用示例
+- Cron 表达式格式说明
 
 ### 管理定时任务
 

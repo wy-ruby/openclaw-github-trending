@@ -9,7 +9,7 @@ OpenClaw plugin for fetching GitHub trending repositories and pushing to Feishu 
 
 ## Features
 
-- 🔥 **GitHub Trending** — Fetch daily (today), weekly (this week), or monthly (this month) trending repositories
+- 🔥 **GitHub Trending** — Fetch trending repositories for today, this week, or this month
 - 🤖 **AI Summaries** — Generate intelligent summaries using OpenAI or Anthropic
 - 📢 **Multi-Channel Push** — Support Feishu and Email notifications
 - 🔄 **Smart Deduplication** — Track repository history and re-push on significant star growth
@@ -95,7 +95,8 @@ This configuration tells OpenClaw to trust and allow loading this plugin. After 
               "smtp_host": "smtp.qq.com",
               "smtp_port": 587,
               "sender": "xxx@qq.com",
-              "password": "xxx"
+              "password": "xxx",
+              "recipient": "yyy@qq.com"
             }
           },
           // Optional: Enable history tracking for smart deduplication
@@ -146,38 +147,76 @@ This configuration tells OpenClaw to trust and allow loading this plugin. After 
      ```
    - You should see the message in your Feishu chat.
 
-### 3. Set Up Scheduled Tasks (Recommended)
+### 3. Setup Scheduled Tasks or Run Immediately
 
-Parameter explanation:
-- Parameter 1: `daily`, `weekly`, `monthly` represents daily, weekly, or monthly trending.
-- Parameter 2: Execution time in HH:mm format, e.g., `9:00` means 9:00 AM, `10:30` means 10:30 AM.
-- Parameter 3: Notification channels, only channels you have configured can be pushed. You can specify multiple channels, separated by commas.
-
-Use the registered `/setup-trending` CLI command to quickly set up scheduled tasks. Simply type the command in OpenClaw chat:
+Use the registered `gen-cron` CLI command to quickly set up scheduled tasks or run immediately. Execute the following commands in the **command line**:
 
 ```
-/setup-trending daily 9:00 feishu
-/setup-trending daily 9:00 email
-/setup-trending daily 9:00 feishu,email
-/setup-trending monthly 8:00 feishu,email
+# Run immediately: Fetch today's trending and push to Feishu and Email
+openclaw gen-cron now daily email,feishu
+
+# Create scheduled task: Fetch weekly trending every Wednesday at 10:00 AM and push to Feishu
+openclaw gen-cron "0 10 * * 3" weekly feishu
+
+# Create scheduled task: Fetch monthly trending on the 1st day of each month at 9:00 AM and push to Email and Feishu
+openclaw gen-cron "0 9 1 * *" monthly email,feishu
+
+# Create scheduled task: Fetch daily trending every day at 8:00 AM and push to Email
+openclaw gen-cron "0 8 * * *" daily email
 ```
 
-**Time format note**: Times are in **Beijing time (CST/UTC+8)**, so `9:00` means 9:00 AM Beijing time.
+**Command Parameter Explanation:**
 
-#### Quick Test (One-Time Execution)
+```
+openclaw gen-cron <mode> <since> <channels>
+```
 
-If you just want to test once to see the effect, without setting up a recurring task:
+| Parameter | Description | Example |
+|-----------|-------------|---------|
+| `mode` | Execution mode: `now` for immediate execution, or Cron expression (format: minute hour day month weekday) | `now`<br>`"0 10 * * 3"` |
+| `since` | Trending period: `daily` (today), `weekly` (this week), `monthly` (this month) | `daily` |
+| `channels` | Push channels: `email`, `feishu`, or `email,feishu` (multiple channels separated by comma) | `feishu`<br>`email,feishu` |
+
+**Cron Expression Format:**
+- Format: `minute(0-59) hour(0-23) day(1-31) month(1-12) weekday(0-7, 0 and 7 are Sunday)`
+- Timezone: **Uses server local time** (usually system time)
+
+**Common Cron Examples:**
+- `"0 8 * * *"` - Every day at 8:00 AM
+- `"0 10 * * 3"` - Every Wednesday at 10:00 AM
+- `"0 9 1 * *"` - 1st day of each month at 9:00 AM
+
+> ⚠️ **Note**: The `gen-cron` command **must be executed in the command line**, not in OpenClaw chat interface.
+>
+> - **Command line**: Run directly in terminal `openclaw gen-cron ...`
+> - **OpenClaw chat**: To use in chat, you need the full `openclaw cron add` command (see below)
+
+#### Setting Up Tasks in OpenClaw Chat
+
+If you want to set up tasks in OpenClaw chat interface, use the full `cron add` command:
 
 ```bash
-# Run once at specific UTC time, then delete
-openclaw cron add --name "Test plugin execution" \
-  --at "2026-03-12T11:42:00Z" \
-  --system-event '{"tool":"openclaw-github-trending","params":{"since":"daily","channels":["feishu", "email"]}}' \
-  --wake now \
-  --delete-after-run
+# Paste the following command in OpenClaw chat (need to escape quotes first)
+
+# Every Wednesday at 10:00 AM, fetch weekly trending and push to Feishu and Email
+openclaw cron add --name "GitHub Trending Weekly Feishu+Email" \
+  --cron "0 10 * * 3" \
+  --system-event '{"tool":"openclaw-github-trending","params":{"since":"weekly","channels":["feishu","email"]}}'
 ```
 
-**Note**: `--at` time is in **UTC** format. For Beijing time, add 8 hours (e.g., 9:00 AM Beijing = 01:00 AM UTC).
+### View Command Help
+
+When you run the command without parameters or with wrong parameters, detailed help information will be displayed automatically:
+
+```bash
+openclaw gen-cron -h
+```
+
+The output will include:
+- Command usage
+- Parameter explanation
+- Usage examples
+- Cron expression format explanation
 
 ### Manage Scheduled Tasks
 
@@ -263,6 +302,7 @@ The plugin supports OpenAI-compatible API providers. If not configured in the pl
 | `use_tls` | boolean | No | `true` | Use TLS/STARTTLS |
 | `sender` | string | Yes* | - | Sender email address |
 | `password` | string | Yes* | - | Email password or app-specific password |
+| `recipient` | string | No | Same as `sender` | Recipient email address (if not configured, defaults to sender address) |
 | `from_name` | string | No | `"GitHub Trending"` | Display name for sender |
 | `timeout` | number | No | `30` | SMTP connection timeout in seconds |
 
