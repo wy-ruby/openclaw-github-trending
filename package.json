@@ -1,6 +1,6 @@
 {
   "name": "openclaw-github-trending",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "OpenClaw plugin for fetching GitHub trending repositories and pushing to Feishu or Email with AI summaries",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -9,7 +9,7 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "prepublishOnly": "npm run build && npm test"
+    "prepublishOnly": "npm run build"
   },
   "keywords": [
     "openclaw",

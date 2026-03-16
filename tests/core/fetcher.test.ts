@@ -14,6 +14,13 @@ describe('GitHubFetcher', () => {
   beforeEach(() => {
     fetcher = new GitHubFetcher();
     jest.clearAllMocks();
+
+    // Mock axios instance methods
+    (axios.create as jest.Mock).mockImplementation(() => {
+      return {
+        get: jest.fn()
+      };
+    });
   });
 
   describe('parseStarCount', () => {
@@ -94,40 +101,49 @@ describe('GitHubFetcher', () => {
   describe('fetchTrending', () => {
     it('should fetch trending page for daily', async () => {
       const mockHtml = '<html><body><div class="Box-row">test</div></body></html>';
-      (axios.get as jest.Mock).mockResolvedValue({
+
+      const mockInstance = { get: jest.fn() };
+      (axios.create as jest.Mock).mockReturnValue(mockInstance);
+      mockInstance.get.mockResolvedValue({
         status: 200,
         data: mockHtml
       });
 
       const repos = await fetcher.fetchTrending('daily');
 
-      expect(axios.get).toHaveBeenCalledWith('https://github.com/trending?since=daily', expect.any(Object));
+      expect(mockInstance.get).toHaveBeenCalledWith('https://github.com/trending?since=daily');
       expect(Array.isArray(repos)).toBe(true);
     });
 
     it('should fetch trending page for weekly', async () => {
       const mockHtml = '<html><body><div class="Box-row">test</div></body></html>';
-      (axios.get as jest.Mock).mockResolvedValue({
+
+      const mockInstance = { get: jest.fn() };
+      (axios.create as jest.Mock).mockReturnValue(mockInstance);
+      mockInstance.get.mockResolvedValue({
         status: 200,
         data: mockHtml
       });
 
       const repos = await fetcher.fetchTrending('weekly');
 
-      expect(axios.get).toHaveBeenCalledWith('https://github.com/trending?since=weekly', expect.any(Object));
+      expect(mockInstance.get).toHaveBeenCalledWith('https://github.com/trending?since=weekly');
       expect(Array.isArray(repos)).toBe(true);
     });
 
     it('should fetch trending page for monthly', async () => {
       const mockHtml = '<html><body><div class="Box-row">test</div></body></html>';
-      (axios.get as jest.Mock).mockResolvedValue({
+
+      const mockInstance = { get: jest.fn() };
+      (axios.create as jest.Mock).mockReturnValue(mockInstance);
+      mockInstance.get.mockResolvedValue({
         status: 200,
         data: mockHtml
       });
 
       const repos = await fetcher.fetchTrending('monthly');
 
-      expect(axios.get).toHaveBeenCalledWith('https://github.com/trending?since=monthly', expect.any(Object));
+      expect(mockInstance.get).toHaveBeenCalledWith('https://github.com/trending?since=monthly');
       expect(Array.isArray(repos)).toBe(true);
     });
 
@@ -136,17 +152,21 @@ describe('GitHubFetcher', () => {
     });
 
     it('should throw error for non-200 response', async () => {
-      (axios.get as jest.Mock).mockResolvedValue({
+      const mockInstance = { get: jest.fn() };
+      (axios.create as jest.Mock).mockReturnValue(mockInstance);
+      mockInstance.get.mockResolvedValue({
         status: 404,
         data: 'Not Found'
       });
 
       await expect(fetcher.fetchTrending('daily')).rejects.toThrow('Failed to fetch trending page');
-      expect(axios.get).toHaveBeenCalledWith('https://github.com/trending?since=daily', expect.any(Object));
+      expect(mockInstance.get).toHaveBeenCalledWith('https://github.com/trending?since=daily');
     });
 
     it('should throw error for network failure', async () => {
-      (axios.get as jest.Mock).mockRejectedValue(new Error('Network Error'));
+      const mockInstance = { get: jest.fn() };
+      (axios.create as jest.Mock).mockReturnValue(mockInstance);
+      mockInstance.get.mockRejectedValue(new Error('Network Error'));
 
       await expect(fetcher.fetchTrending('daily')).rejects.toThrow('Failed to fetch trending page');
     });
@@ -154,19 +174,23 @@ describe('GitHubFetcher', () => {
 
   describe('fetchReadme', () => {
     it('should fetch README content from repository', async () => {
-      (axios.get as jest.Mock).mockResolvedValue({
+      const mockInstance = { get: jest.fn() };
+      (axios.create as jest.Mock).mockReturnValue(mockInstance);
+      mockInstance.get.mockResolvedValue({
         status: 200,
         data: '# Test README\n\nThis is a test repository.'
       });
 
       const readme = await fetcher.fetchReadme('test-user/test-repo');
 
-      expect(axios.get).toHaveBeenCalledWith('https://raw.githubusercontent.com/test-user/test-repo/main/README.md', expect.any(Object));
+      expect(mockInstance.get).toHaveBeenCalledWith('https://raw.githubusercontent.com/test-user/test-repo/main/README.md', expect.any(Object));
       expect(readme).toBe('# Test README\n\nThis is a test repository.');
     });
 
     it('should handle 404 for README', async () => {
-      (axios.get as jest.Mock).mockResolvedValue({
+      const mockInstance = { get: jest.fn() };
+      (axios.create as jest.Mock).mockReturnValue(mockInstance);
+      mockInstance.get.mockResolvedValue({
         status: 404,
         data: ''
       });
@@ -180,7 +204,9 @@ describe('GitHubFetcher', () => {
       // When main branch 404s (caught in inner try), it tries getter branch
       // When getter also 404s, we return empty string
       // Simulate this by resolving 404 status (not rejecting)
-      (axios.get as jest.Mock).mockResolvedValue({
+      const mockInstance = { get: jest.fn() };
+      (axios.create as jest.Mock).mockReturnValue(mockInstance);
+      mockInstance.get.mockResolvedValue({
         status: 404,
         data: ''
       });
@@ -193,7 +219,9 @@ describe('GitHubFetcher', () => {
     });
 
     it('should return empty string for other HTTP errors', async () => {
-      (axios.get as jest.Mock).mockRejectedValue(new Error('Internal Server Error'));
+      const mockInstance = { get: jest.fn() };
+      (axios.create as jest.Mock).mockReturnValue(mockInstance);
+      mockInstance.get.mockRejectedValue(new Error('Internal Server Error'));
 
       const readme = await fetcher.fetchReadme('test-user/test-repo');
 

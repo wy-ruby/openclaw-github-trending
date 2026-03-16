@@ -185,6 +185,13 @@ export class Logger {
   }
 
   /**
+   * Get the logger prefix (for testing)
+   */
+  getPrefix(): string {
+    return this.prefix;
+  }
+
+  /**
    * Create a timer function for measuring execution time
    */
   timer(operation: string): () => number {

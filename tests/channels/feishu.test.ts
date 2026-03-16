@@ -42,10 +42,16 @@ describe('FeishuChannel', () => {
     it('should include correct title with date', () => {
       const repositories: RepositoryInfo[] = [];
       const card = FeishuChannel.buildCard(repositories, []);
+      const card2 = FeishuChannel.buildCard(repositories, [], 'daily');
+      const card3 = FeishuChannel.buildCard(repositories, [], 'weekly');
 
       const title = card.header?.title;
+      const title2 = card2.header?.title;
+      const title3 = card3.header?.title;
       expect(title).toBeDefined();
-      expect(title?.content).toContain('GitHub 热榜推送');
+      expect(title?.content).toContain('GitHub 本月热榜推送');
+      expect(title2?.content).toContain('GitHub 今日热榜推送');
+      expect(title3?.content).toContain('GitHub 本周热榜推送');
     });
 
     it('should build card with both new and seen repositories', () => {
@@ -112,14 +118,16 @@ describe('FeishuChannel', () => {
           url: 'https://github.com/org/desc-repo',
           stars: 100,
           description: 'This is a detailed description with multiple lines. It contains important information about the repository. Lines 3 of description.',
+          ai_summary: 'AI generated summary for this repository with important details about its features and usage.',
           language: 'Rust'
         }
       ];
 
-      const card = FeishuChannel.buildCard(repositories, []);
+      const card = FeishuChannel.buildCard(repositories, [], 'monthly');
       const cardContent = JSON.stringify(card);
 
-      expect(cardContent).toContain('This is a detailed description');
+      // 新项目会显示 AI summary
+      expect(cardContent).toContain('AI generated summary');
     });
 
     it('should include language tag when available', () => {

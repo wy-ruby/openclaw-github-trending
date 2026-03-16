@@ -58,7 +58,8 @@ describe('EmailChannel', () => {
   }
 
   const mockTransport = {
-    sendMail: jest.fn()
+    sendMail: jest.fn(),
+    verify: jest.fn()
   };
 
   beforeEach(() => {
@@ -259,6 +260,8 @@ describe('EmailChannel', () => {
         host: 'smtp.example.com',
         port: 587,
         secure: false,
+        logger: false,
+        debug: false,
         auth: {
           user: 'user@example.com',
           pass: 'password'

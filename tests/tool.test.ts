@@ -21,7 +21,13 @@ let currentHistoryData: HistoryData | null = null;
 
 // Create the mock history manager - this will be called in beforeEach
 function createMockHistoryManager() {
+  const mockData = {
+    repositories: {},
+    last_updated: new Date().toISOString()
+  };
+
   return {
+    data: mockData,
     categorizeRepositories: jest.fn((repos: RepositoryInfo[], config: any) => {
       const newlySeen: RepositoryInfo[] = [];
       const shouldPush: RepositoryInfo[] = [];
@@ -52,10 +58,17 @@ function createMockHistoryManager() {
     }),
     importData: jest.fn((data: HistoryData) => {
       currentHistoryData = data;
+      mockData.repositories = data.repositories;
     }),
     exportData: jest.fn(),
     updateAiSummary: jest.fn(),
-    clear: jest.fn()
+    clear: jest.fn(),
+    getStats: jest.fn(() => ({
+      total_repositories: 0,
+      total_pushes: 0,
+      oldest_entry: undefined,
+      newest_entry: undefined
+    }))
   };
 }
 
@@ -101,7 +114,7 @@ describe('githubTrendingTool', () => {
 
   describe('tool definition', () => {
     it('should have correct name', () => {
-      expect(toolModule.githubTrendingTool.name).toBe('github-trending');
+      expect(toolModule.githubTrendingTool.name).toBe('openclaw-github-trending');
     });
 
     it('should have correct description', () => {
@@ -116,13 +129,14 @@ describe('githubTrendingTool', () => {
 
       const props = params.properties as any;
       expect(props.since).toBeDefined();
-      expect(props.channel).toBeDefined();
+      expect(props.channels).toBeDefined();
 
       // Verify since enum values
       expect(props.since.enum).toEqual(['daily', 'weekly', 'monthly']);
 
-      // Verify channel enum values
-      expect(props.channel.enum).toEqual(['feishu', 'email']);
+      // Verify channels array items
+      expect(props.channels.type).toBe('array');
+      expect(props.channels.items.enum).toEqual(['feishu', 'email']);
     });
   });
 
