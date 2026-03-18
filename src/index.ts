@@ -351,7 +351,21 @@ Cron 表达式格式：
       };
 
       // Parse channels (use params.channels, not context)
-      const targetChannels = channels || [];
+      // Handle both array format (from zod validation) and string format (from CLI cron job)
+      let targetChannels: ('feishu' | 'email')[] = [];
+
+      // Support both array format from zod validation and string format from CLI cron jobs
+      if (channels) {
+        if (Array.isArray(channels)) {
+          // Array format from zod validation
+          targetChannels = channels;
+        } else {
+          // String format - this shouldn't happen with zod validation, but handle it just in case
+          const stringChannels = String(channels).split(',').map(c => c.trim());
+          targetChannels = stringChannels.filter(c => c === 'feishu' || c === 'email') as ('feishu' | 'email')[];
+        }
+      }
+
       if (targetChannels.length === 0) {
         // Fallback to configured channels if not specified in params
         if (pluginConfig?.channels?.feishu?.webhook_url) targetChannels.push('feishu');

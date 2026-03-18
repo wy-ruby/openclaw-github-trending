@@ -147,9 +147,9 @@ This configuration tells OpenClaw to trust and allow loading this plugin. After 
      ```
    - You should see the message in your Feishu chat.
 
-### 3. Setup Scheduled Tasks or Run Immediately
+### Setup Scheduled Tasks or Run Immediately
 
-Use the registered `gen-cron` CLI command to quickly set up scheduled tasks or run immediately. Execute the following commands in the **command line**:
+Use the registered `gen-cron` CLI command to quickly set up scheduled tasks or run immediately. Execute the following commands in the **command line** where you can use the `openclaw` command:
 
 ```
 # Run immediately: Fetch today's trending and push to Feishu and Email
@@ -213,30 +213,30 @@ openclaw cron add --name "GitHub Trending Weekly Feishu+Email" \
 Simply describe your needs in natural language in the OpenClaw chat interface:
 
 ```
-Help me create a scheduled task that pushes GitHub monthly trending to my email every day at 18:45
+Use the openclaw-github-trending tool to help me create a scheduled task that pushes GitHub monthly trending to my email every day at 18:45
 ```
 
 **Supported Natural Language Examples:**
 
 ```text
 // Daily Push
-- "Help me create a task to push GitHub daily trending to my email every morning at 8:00"
-- "I want to receive GitHub daily trending in my email every day at 18:45"
-- "Create a scheduled task: fetch daily trending every day at 9:00 AM and push to Feishu"
+- "Use the openclaw-github-trending tool to help me create a task to push GitHub daily trending to my email every morning at 8:00"
+- "I want to use the openclaw-github-trending tool to receive GitHub daily trending in my email every day at 18:45"
+- "Use the openclaw-github-trending tool to create a scheduled task: fetch daily trending every day at 9:00 AM and push to Feishu"
 
 // Weekly Push
-- "Help me create a task to push GitHub weekly trending to Feishu every Monday at 10:00"
-- "I want to receive weekly trending in Feishu and email every Friday at 18:00"
-- "Fetch weekly trending every Wednesday morning at 9:00 AM and push to Feishu"
+- "Use the openclaw-github-trending tool to help me create a task to push GitHub weekly trending to Feishu every Monday at 10:00"
+- "I want to use the openclaw-github-trending tool to receive weekly trending in Feishu and email every Friday at 18:00"
+- "Use the openclaw-github-trending tool to fetch weekly trending every Wednesday morning at 9:00 AM and push to Feishu"
 
 // Monthly Push
-- "Help me create a task to push GitHub monthly trending to my email on the 1st of every month at 9:00"
-- "I want to receive GitHub monthly trending in my email on the 15th of every month at 18:45"
-- "Help me use the openclaw-github-trending tool to create a scheduled task that runs every day at 18:45, pushes monthly GitHub trending, and sends the content to my email"
+- "Use the openclaw-github-trending tool to help me create a task to push GitHub monthly trending to my email on the 1st of every month at 9:00"
+- "I want to use the openclaw-github-trending tool to receive GitHub monthly trending in my email on the 15th of every month at 18:45"
+- "Use the openclaw-github-trending tool to help me create a scheduled task that runs every day at 18:45, pushes monthly GitHub trending, and sends the content to my email"
 
 // Multi-Channel Push
-- "Help me create a task to push daily trending to both Feishu and email every day at 8:00"
-- "I want to receive trending every day at 10:00, sent to both Feishu and my email"
+- "Use the openclaw-github-trending tool to help me create a task to push daily trending to both Feishu and email every day at 8:00"
+- "I want to use the openclaw-github-trending tool to receive trending every day at 10:00, sent to both Feishu and my email"
 ```
 
 **Intelligent Parsing Capabilities:**
@@ -248,7 +248,7 @@ Help me create a scheduled task that pushes GitHub monthly trending to my email 
 
 **Execution Flow:**
 
-1. User inputs natural language instruction in OpenClaw chat
+1. User inputs natural language instruction in OpenClaw chat (must include `openclaw-github-trending` tool name)
 2. OpenClaw parses the instruction and identifies the tool (`openclaw-github-trending`)
 3. Automatically extracts time, period, push channels, and other parameters
 4. Generates the corresponding `cron add` command and creates the task

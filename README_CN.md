@@ -150,7 +150,7 @@ openclaw plugins install openclaw-github-trending
 
 ### 3. 设置定时任务或立即执行
 
-使用注册的 `gen-cron` CLI 命令快速设置定时任务或立即执行。在**命令行中**执行以下命令：
+使用注册的 `gen-cron` CLI 命令快速设置定时任务或立即执行。在你能使用 `openclaw` 命令的那个**命令行中**中直接执行以下命令：
 
 ```
 # 立即执行：获取今日热榜并推送到飞书和邮箱
@@ -214,30 +214,30 @@ openclaw cron add --name "GitHub 热榜 每周 飞书+邮箱" \
 直接在 OpenClaw 聊天界面中用自然语言描述需求：
 
 ```
-帮我创建一个每天 18:45 推送 GitHub 月榜到邮箱的定时任务
+使用openclaw-github-trending工具，帮我创建一个每天 18:45 推送 GitHub 月榜到邮箱的定时任务
 ```
 
 **支持的自然语言示例：**
 
 ```text
 // 每日推送
-- "帮我创建每天早上 8:00 推送 GitHub 今日热榜到邮箱的任务"
-- "我想每天 18:45 收到 GitHub 今日热榜，发到我的邮箱"
-- "创建定时任务：每天 9:00 获取今日热榜并推送到飞书"
+- "使用openclaw-github-trending工具，帮我创建每天早上 8:00 推送 GitHub 今日热榜到邮箱的任务"
+- "我想使用openclaw-github-trending工具，在每天 18:45 收到 GitHub 今日热榜，并把内容发送到我的邮箱"
+- "使用openclaw-github-trending工具创建定时任务：每天 9:00 获取今日热榜并推送到飞书"
 
 // 每周推送
-- "帮我创建每周一 10:00 推送 GitHub 本周热榜到飞书的任务"
-- "我想每周五 18:00 收到本周热榜，发到飞书和邮箱"
-- "每周三早上 9:00 获取本周热榜并推送到飞书"
+- "使用openclaw-github-trending工具，帮我创建每周一 10:00 推送 GitHub 本周热榜到飞书的任务"
+- "我想使用openclaw-github-trending工具，每周五 18:00 收到本周热榜，发到飞书和邮箱"
+- "使用openclaw-github-trending工具，每周三早上 9:00 获取本周热榜并推送到飞书"
 
 // 每月推送
-- "帮我创建每月 1 号 9:00 推送 GitHub 月榜到邮箱的任务"
-- "我想每月 15 号 18:45 收到 GitHub 月榜，发到我的邮箱"
-- "帮我使用 openclaw-github-trending 工具创建一个每天 18:45，推送每月 GitHub 热榜的定时任务，需要将 GitHub 热榜内容发送到我的邮箱中"
+- "使用openclaw-github-trending工具，帮我创建每月 1 号 9:00 推送 GitHub 月榜到邮箱的任务"
+- "我想使用openclaw-github-trending工具，每月 15 号 18:45 收到 GitHub 月榜，发到我的邮箱"
+- "使用openclaw-github-trending工具，帮我创建一个每天 18:45，推送每月 GitHub 热榜的定时任务，需要将 GitHub 热榜内容发送到我的邮箱中"
 
 // 多渠道推送
-- "帮我创建每天 8:00 推送今日热榜到飞书和邮箱的任务"
-- "我想每天 10:00 收到热榜，同时发到飞书和我的邮箱"
+- "使用openclaw-github-trending工具，帮我创建每天 8:00 推送今日热榜到飞书和邮箱的任务"
+- "我想使用openclaw-github-trending工具，每天 10:00 收到热榜，同时发到飞书和我的邮箱" 
 ```
 
 **智能解析能力：**
@@ -249,7 +249,7 @@ openclaw cron add --name "GitHub 热榜 每周 飞书+邮箱" \
 
 **执行流程：**
 
-1. 用户在 OpenClaw 聊天中输入自然语言指令
+1. 用户在 OpenClaw 聊天中输入自然语言指令，需要携带 `openclaw-github-trending` 工具名称
 2. OpenClaw 解析指令并识别工具（`openclaw-github-trending`）
 3. 自动提取时间、周期、推送渠道等参数
 4. 生成对应的 `cron add` 命令并创建任务
