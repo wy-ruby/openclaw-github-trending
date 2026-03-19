@@ -253,7 +253,12 @@ Cron 表达式格式：
             const periodLabel = sinceLower === 'daily' ? '每日' : sinceLower === 'weekly' ? '每周' : '每月';
             const channelLabel = channelList.map(c => c === 'feishu' ? '飞书' : '邮箱').join('+');
             const jobName = `GitHub 热榜 ${periodLabel} ${channelLabel}`;
-            const cronCmd = `openclaw cron add --name "${jobName}" --cron "${schedule}" --system-event '${JSON.stringify({tool: "openclaw-github-trending", params: toolParams})}'`;
+
+            // 修复：使用自然语言格式而不是 JSON 格式，这样 Agent 可以正确理解和调用工具
+            const channelsParam = channelList.join(',');
+            const systemEventText = `请获取 GitHub ${sinceLower === 'daily' ? '今日' : sinceLower === 'weekly' ? '本周' : '本月'} 热榜项目，使用 openclaw-github-trending 工具，参数 since=${sinceLower}, channels=[${channelsParam}]，推送到${channelList.map(c => c === 'feishu' ? '飞书' : '邮箱').join('和')}`;
+
+            const cronCmd = `openclaw cron add --name "${jobName}" --cron "${schedule}" --system-event '${systemEventText.replace(/'/g, "\\'")}'`;
 
             const { exec } = await import('child_process');
             try {
