@@ -331,7 +331,8 @@ Cron 表达式格式：
         params,
         configAvailable: !!pluginConfig,
         storageAvailable: !!storage,
-        openclawConfigAvailable: !!openclawConfig
+        openclawConfigAvailable: !!openclawConfig,
+        channels: channels || []
       });
 
       // Create a logger wrapper that logs to both OpenClaw logger and file
