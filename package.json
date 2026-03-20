@@ -45,7 +45,7 @@
     "CHANGELOG.md"
   ],
   "peerDependencies": {
-    "openclaw": ">=2026.1.15"
+    "openclaw": "^0.0.1"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
