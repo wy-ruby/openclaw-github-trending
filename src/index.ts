@@ -303,25 +303,41 @@ Cron 表达式格式：
       feishu_webhook: z.string().url().optional().describe('Feishu webhook URL (overrides config)')
     },
     async execute(
+      _toolCallId: string,  // ✅ First param is tool call ID
       params: GitHubTrendingParams,
-      context: {
-        config?: PluginConfig;
+      context?: {  // ✅ Context is optional third param
         logger?: { info: Function; error: Function; warn: Function };
         storage?: { get: Function; set: Function };
         openclawConfig?: OpenClawGlobalConfig;
       }
     ) {
       const { since, channels, email_to, feishu_webhook } = params;
-      const { config: pluginConfig, logger, storage, openclawConfig: openclawConfigFromContext } = context;
-
-      // Use api.config as fallback if context.openclawConfig is not available
-      const openclawConfig = openclawConfigFromContext || openclawConfigFromApi;
 
       // Internal logger instance for file logging
       const internalLogger = Logger.get('Tool');
 
-      // Check if plugin is enabled
+      // ✅ Access plugin config from api.pluginConfig (not context)
+      const pluginConfig = api.pluginConfig || {};
+      const openclawConfig = api.config || {};
+
       const pluginId = 'openclaw-github-trending';
+
+      // 🔍 Debug logging for context injection issues
+      internalLogger.info('🔍 Tool execution debug', {
+        toolCallId: _toolCallId,
+        rawParams: JSON.stringify(params, null, 2),
+        since: params.since,
+        channels: params.channels,
+        channelsType: params.channels ? typeof params.channels : 'undefined',
+        hasChannelsArray: Array.isArray(params.channels),
+        pluginConfigAvailable: Object.keys(pluginConfig).length > 0,
+        pluginConfigKeys: Object.keys(pluginConfig),
+        contextAvailable: !!context,
+        contextKeys: context ? Object.keys(context) : [],
+        storageAvailable: !!context?.storage
+      });
+
+      // Check if plugin is enabled
       const entryConfig = openclawConfig?.plugins?.entries?.[pluginId];
       const isEnabled = entryConfig?.enabled ?? true; // Default to enabled if not specified
 
@@ -333,9 +349,11 @@ Cron 表达式格式：
       }
 
       internalLogger.info('Starting execution', {
+        toolCallId: _toolCallId,
         params,
         configAvailable: !!pluginConfig,
-        storageAvailable: !!storage,
+        pluginConfigKeys: Object.keys(pluginConfig),
+        storageAvailable: !!context?.storage,
         openclawConfigAvailable: !!openclawConfig,
         channels: channels || []
       });
@@ -394,8 +412,8 @@ Cron 表达式格式：
       try {
         // Initialize history manager
         const historyManager = new HistoryManager();
-        if (storage) {
-          const historyData = await storage.get('github-trending-history');
+        if (context?.storage) {
+          const historyData = await context.storage.get('github-trending-history');
           if (historyData) {
             historyManager.importData(historyData);
           }
@@ -648,26 +666,56 @@ Cron 表达式格式：
           }
         }
 
-        // Update history
-        historyManager.markPushed(reposWithSummary);
+        // Update history - 需要保存所有仓库（包括已推送的、新发现的、和已见过的）
+        // markPushed 会为每个仓库创建/更新记录
+        historyManager.markPushed([...reposWithSummary, ...alreadySeen]);
 
-        // Save to both OpenClaw storage and file storage (for redundancy)
-        if (storage) {
-          await storage.set('github-trending-history', historyManager.exportData());
-          safeLogger.info('History saved to OpenClaw storage');
+        // 同时保存到两个存储后端（冗余）
+        const savePromises: Promise<void>[] = [];
+
+        // 1. 保存到 OpenClaw storage（如果可用）
+        if (context?.storage) {
+          savePromises.push(
+            context.storage.set('github-trending-history', historyManager.exportData())
+              .then(() => {
+                safeLogger.info('✅ History saved to OpenClaw storage');
+              })
+              .catch((error: any) => {
+                safeLogger.error('❌ Failed to save to OpenClaw storage', { error: error.message });
+              })
+          );
         }
 
-        // Also save to file storage as backup
+        // 2. 保存到文件存储（始终尝试）
         try {
-          const storageManager = getStorageManager(pluginId);
-          await storageManager.set('github-trending-history', historyManager.exportData());
-          safeLogger.info('History saved to file storage', {
-            path: `~/.openclaw/plugins/${pluginId}/data/${storageManager['getCurrentMonthKey']()}.json`,
-            repoCount: Object.keys(historyManager['data'].repositories).length
-          });
-        } catch (fileStorageError) {
-          safeLogger.warn('Failed to save history to file storage', { error: fileStorageError });
+          const fileStorage = getStorageManager(pluginId);
+          savePromises.push(
+            fileStorage.set('github-trending-history', historyManager.exportData())
+              .then(() => {
+                // 计算当前月份作为日志展示
+                const now = new Date();
+                const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+                safeLogger.info('✅ History saved to file storage', {
+                  path: `~/.openclaw/plugins/${pluginId}/data/${monthKey}.json`,
+                  repoCount: Object.keys(historyManager['data'].repositories).length
+                });
+              })
+              .catch((error: any) => {
+                safeLogger.error('❌ Failed to save to file storage', { error: error.message });
+              })
+          );
+        } catch (error) {
+          safeLogger.error('❌ Failed to initialize file storage', { error: error instanceof Error ? error.message : error });
         }
+
+        // 等待所有保存操作完成
+        await Promise.all(savePromises);
+
+        safeLogger.info('📊 History persistence complete', {
+          totalReposInHistory: Object.keys(historyManager['data'].repositories).length,
+          newlyPushed: reposWithSummary.length,
+          alreadySeen: alreadySeen.length
+        });
 
         // Calculate result statistics
         const successCount = pushResults.filter(r => r.success).length;
