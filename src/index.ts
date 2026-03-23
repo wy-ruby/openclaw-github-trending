@@ -297,10 +297,34 @@ Cron 表达式格式：
     name: 'openclaw-github-trending',
     description: 'Fetch GitHub trending repositories and push to Feishu or Email with AI summaries',
     parameters: {
-      since: z.enum(['daily', 'weekly', 'monthly']).describe('Time period for trending'),
-      channels: z.array(z.enum(['feishu', 'email'])).optional().describe('Push channels (array: ["email"], ["feishu"], or ["email", "feishu"])'),
-      email_to: z.string().email().optional().describe('Email recipient (overrides config)'),
-      feishu_webhook: z.string().url().optional().describe('Feishu webhook URL (overrides config)')
+      type: 'object',
+      properties: {
+        since: {
+          type: 'string',
+          enum: ['daily', 'weekly', 'monthly'],
+          description: 'Time period for trending (daily/weekly/monthly)'
+        },
+        channels: {
+          type: 'array',
+          items: {
+            type: 'string',
+            enum: ['feishu', 'email']
+          },
+          description: 'Push channels: ["email"], ["feishu"], or ["email", "feishu"]'
+        },
+        email_to: {
+          type: 'string',
+          format: 'email',
+          description: 'Email recipient (overrides config)'
+        },
+        feishu_webhook: {
+          type: 'string',
+          format: 'uri',
+          description: 'Feishu webhook URL (overrides config)'
+        }
+      },
+      required: ['since'],
+      additionalProperties: false
     },
     async execute(
       _toolCallId: string,  // ✅ First param is tool call ID
@@ -688,7 +712,7 @@ Cron 表达式格式：
               const emailChannelConfig = {
                 from: emailConfig.sender || '',
                 to: emailTo,
-                subject: `GitHub 热榜 ${since === 'daily' ? '今日' : since === 'weekly' ? '本周' : '本月'}推送`,
+                subject: `GitHub ${since === 'daily' ? '今日热榜' : since === 'weekly' ? '本周热榜' : '本月热榜'}推送`,
                 smtp: {
                   host: emailConfig.smtp_host || 'smtp.qq.com',
                   // 默认使用 587 端口 + STARTTLS，这是更可靠的配置

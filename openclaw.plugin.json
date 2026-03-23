@@ -1,7 +1,7 @@
 {
   "id": "openclaw-github-trending",
   "name": "GitHub Trending",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "description": "Fetch GitHub trending repositories and push to Feishu or Email with AI summaries",
   "author": "王允",
   "license": "MIT",
@@ -11,7 +11,7 @@
   },
   "entry": "dist/index.js",
   "engines": {
-    "openclaw": ">=2026.3.13",
+    "openclaw": ">=2026.3.2",
     "node": ">=18.0.0"
   },
   "configSchema": {
