@@ -355,8 +355,7 @@ The plugin supports OpenAI-compatible API providers. If not configured in the pl
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
 | `smtp_host` | string | No | `"smtp.gmail.com"` | SMTP server host |
-| `smtp_port` | number | No | `587` | SMTP server port |
-| `use_tls` | boolean | No | `true` | Use TLS/STARTTLS |
+| `smtp_port` | number | No | `587` | SMTP server port (465 for SSL, 587 for STARTTLS) |
 | `sender` | string | Yes* | - | Sender email address |
 | `password` | string | Yes* | - | Email password or app-specific password |
 | `recipient` | string | No | Same as `sender` | Recipient email address (if not configured, defaults to sender address) |

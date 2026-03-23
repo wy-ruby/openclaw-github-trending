@@ -43,7 +43,6 @@ export interface OpenClawGlobalConfig {
 export interface SMTPConfig {
   smtp_host: string;
   smtp_port: number;
-  use_tls: boolean;
   sender: string;
   password: string;
   from_name: string;
@@ -169,7 +168,6 @@ export class ConfigManager {
       return {
         smtp_host: pluginEmailConfig.smtp_host,
         smtp_port: pluginEmailConfig.smtp_port || 587,
-        use_tls: pluginEmailConfig.use_tls ?? true,
         sender: pluginEmailConfig.sender || email,
         password: pluginEmailConfig.password || password,
         from_name: pluginEmailConfig.from_name || 'GitHub Trending',
@@ -183,29 +181,24 @@ export class ConfigManager {
     interface EmailPreset {
       smtp_host: string;
       smtp_port: number;
-      use_tls: boolean;
     }
 
     const presets: { [key: string]: EmailPreset } = {
       'qq.com': {
         smtp_host: 'smtp.qq.com',
-        smtp_port: 587,
-        use_tls: true
+        smtp_port: 587
       },
       '163.com': {
         smtp_host: 'smtp.163.com',
-        smtp_port: 587,
-        use_tls: true
+        smtp_port: 587
       },
       'gmail.com': {
         smtp_host: 'smtp.gmail.com',
-        smtp_port: 587,
-        use_tls: true
+        smtp_port: 587
       },
       'aliyun.com': {
         smtp_host: 'smtp.aliyun.com',
-        smtp_port: 587,
-        use_tls: true
+        smtp_port: 587
       }
     };
 
@@ -214,7 +207,6 @@ export class ConfigManager {
     return {
       smtp_host: preset.smtp_host,
       smtp_port: preset.smtp_port,
-      use_tls: preset.use_tls,
       sender: email,
       password: password,
       from_name: 'GitHub Trending',

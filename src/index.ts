@@ -412,11 +412,46 @@ Cron 表达式格式：
       try {
         // Initialize history manager
         const historyManager = new HistoryManager();
+
+        // Load history from BOTH sources to ensure persistence works
+        let historyData = null;
+
+        // 1. Try OpenClaw storage first (for compatibility)
         if (context?.storage) {
-          const historyData = await context.storage.get('github-trending-history');
-          if (historyData) {
-            historyManager.importData(historyData);
+          try {
+            historyData = await context.storage.get('github-trending-history');
+            if (historyData) {
+              safeLogger.info('✅ History loaded from OpenClaw storage');
+            }
+          } catch (error) {
+            safeLogger.warn('Failed to load from OpenClaw storage', { error: error instanceof Error ? error.message : error });
           }
+        }
+
+        // 2. Always try file storage as fallback/primary source
+        if (!historyData) {
+          try {
+            const fileStorage = getStorageManager(pluginId);
+            historyData = await fileStorage.get('github-trending-history');
+            if (historyData) {
+              safeLogger.info('✅ History loaded from file storage', {
+                repoCount: Object.keys(historyData.repositories || {}).length,
+                lastUpdated: historyData.last_updated
+              });
+            }
+          } catch (error) {
+            safeLogger.warn('Failed to load from file storage', { error: error instanceof Error ? error.message : error });
+          }
+        }
+
+        // Import history data if found
+        if (historyData) {
+          historyManager.importData(historyData);
+          safeLogger.info('✅ History manager initialized with data', {
+            totalRepos: Object.keys(historyManager['data'].repositories).length
+          });
+        } else {
+          safeLogger.warn('⚠️ No history data found - starting fresh');
         }
 
         // Resolve AI configuration
@@ -438,16 +473,18 @@ Cron 表达式格式：
 
         safeLogger.info(`Using AI provider: ${aiConfig.provider}, model: ${aiConfig.model}`);
 
+        // Categorize repositories with proper history config from plugin
+        const historyConfig = {
+          enabled: pluginConfig?.history?.enabled ?? true,
+          star_threshold: pluginConfig?.history?.star_threshold ?? 100
+        };
+
         // Fetch trending repositories
         safeLogger.info(`Fetching GitHub trending repositories (${since})`);
         const fetcher = new GitHubFetcher(pluginConfig);
         const repositories = await fetcher.fetchTrending(since);
 
-        // Categorize repositories
-        const historyConfig = {
-          enabled: pluginConfig?.history?.enabled ?? true,
-          star_threshold: pluginConfig?.history?.star_threshold ?? 100
-        };
+        // Categorize repositories into newlySeen, shouldPush, and alreadySeen
         const { newlySeen, shouldPush, alreadySeen } = historyManager.categorizeRepositories(
           repositories,
           historyConfig
@@ -462,22 +499,46 @@ Cron 表达式格式：
           safeLogger.info(`     Stars: ${repo.stars.toLocaleString()} | Description: ${repo.description || 'N/A'}`);
         });
 
+        // Split alreadySeen into two categories:
+        // - seenButNotPush: 已见过但不需要重新推送（使用历史摘要，放在"持续霸榜项目"中）
+        // - seenAndPush: 已见过且需要重新推送（重新生成摘要，放在"新上榜项目"中）
+        const seenButNotPush: RepositoryInfo[] = [];
+        const seenAndPush: RepositoryInfo[] = [];
+        const newlySeenOnly: RepositoryInfo[] = [];
+
+        for (const repo of shouldPush) {
+          const isAlreadySeen = alreadySeen.some(r => r.full_name === repo.full_name);
+          if (isAlreadySeen) {
+            seenAndPush.push(repo);
+          } else {
+            newlySeenOnly.push(repo);
+          }
+        }
+
+        for (const repo of alreadySeen) {
+          if (!shouldPush.some(r => r.full_name === repo.full_name)) {
+            seenButNotPush.push(repo);
+          }
+        }
+
         safeLogger.info('Categorization results:');
-        if (newlySeen.length > 0) {
-          safeLogger.info(`  ➕ Newly seen (${newlySeen.length}):`);
-          newlySeen.forEach((repo, idx) => {
+        if (newlySeenOnly.length > 0) {
+          safeLogger.info(`  ➕ 新上榜项目 (${newlySeenOnly.length}):`);
+          newlySeenOnly.forEach((repo, idx) => {
             safeLogger.info(`     ${idx + 1}. ${repo.full_name} (${repo.stars} stars)`);
           });
         }
-        if (shouldPush.length > 0) {
-          safeLogger.info(`  ✅ Should push (${shouldPush.length}):`);
-          shouldPush.forEach((repo, idx) => {
-            safeLogger.info(`     ${idx + 1}. ${repo.full_name} (${repo.stars} stars)`);
+        if (seenAndPush.length > 0) {
+          safeLogger.info(`  🔄 持续霸榜且需要重新推送 (${seenAndPush.length}):`);
+          seenAndPush.forEach((repo, idx) => {
+            const history = historyManager.getProject(repo.full_name);
+            const starsDiff = repo.stars - (history?.last_stars || 0);
+            safeLogger.info(`     ${idx + 1}. ${repo.full_name} (${repo.stars} stars, +${starsDiff} since last)`);
           });
         }
-        if (alreadySeen.length > 0) {
-          safeLogger.info(`  🔁 Already seen (${alreadySeen.length}):`);
-          alreadySeen.forEach((repo, idx) => {
+        if (seenButNotPush.length > 0) {
+          safeLogger.info(`  ⏸️  持续霸榜无需推送 (${seenButNotPush.length}):`);
+          seenButNotPush.forEach((repo, idx) => {
             const history = historyManager.getProject(repo.full_name);
             const starsDiff = repo.stars - (history?.last_stars || 0);
             safeLogger.info(`     ${idx + 1}. ${repo.full_name} (${repo.stars} stars, +${starsDiff} since last)`);
@@ -485,73 +546,88 @@ Cron 表达式格式：
         }
 
         // Generate AI summaries (with concurrency control)
+        // Only generate summaries for newly seen repos and seen repos that need re-pushing
         const summarizer = new AISummarizer(aiConfig);
         const maxWorkers = ConfigManager.getMaxWorkers(pluginConfig);
         const reposWithSummary: RepositoryInfo[] = [];
 
-        safeLogger.info(`Generating AI summaries with ${maxWorkers} workers...`);
+        const totalReposToSummarize = newlySeenOnly.length + seenAndPush.length;
+        if (totalReposToSummarize > 0) {
+          safeLogger.info(`Generating AI summaries for ${totalReposToSummarize} repositories (${newlySeenOnly.length} newly seen + ${seenAndPush.length} seen with star growth)...`);
 
-        // Process repositories in batches with concurrency control
-        for (let i = 0; i < shouldPush.length; i += maxWorkers) {
-          const batch = shouldPush.slice(i, i + maxWorkers);
-          safeLogger.info(`[Batch ${Math.floor(i / maxWorkers) + 1}/${Math.ceil(shouldPush.length / maxWorkers)}] Processing ${batch.length} repositories...`);
+          // Combine newlySeenOnly and seenAndPush for AI generation
+          const reposToSummarize = [...newlySeenOnly, ...seenAndPush];
 
-          const batchResults = await Promise.allSettled(
-            batch.map(async (repo) => {
-              try {
-                safeLogger.info(`  📖 [${repo.full_name}] Fetching README...`);
-                const readmeContent = await fetcher.fetchReadme(repo.full_name);
+          // Process repositories in batches with concurrency control
+          for (let i = 0; i < reposToSummarize.length; i += maxWorkers) {
+            const batch = reposToSummarize.slice(i, i + maxWorkers);
+            safeLogger.info(`[Batch ${Math.floor(i / maxWorkers) + 1}/${Math.ceil(reposToSummarize.length / maxWorkers)}] Processing ${batch.length} repositories...`);
 
-                let summary = '';
+            const batchResults = await Promise.allSettled(
+              batch.map(async (repo) => {
+                try {
+                  safeLogger.info(`  📖 [${repo.full_name}] Fetching README...`);
+                  const readmeContent = await fetcher.fetchReadme(repo.full_name);
 
-                if (readmeContent) {
-                  const readmePreview = readmeContent.substring(0, 100).replace(/\n/g, ' ').trim();
-                  safeLogger.info(`  ✓ README found (${readmeContent.length} chars), preview: "${readmePreview}..."`);
-                  safeLogger.info(`  🤖 [${repo.full_name}] Generating AI summary from README...`);
-                  const startTime = Date.now();
-                  summary = await summarizer.summarizeReadme(repo.full_name, readmeContent);
-                  const duration = Date.now() - startTime;
-                  safeLogger.info(`  ✓ Summary generated (${summary.length} chars) in ${duration}ms`);
-                  if (summary) {
-                    safeLogger.info(`  📝 [${repo.full_name}] Summary: ${summary.substring(0, 100)}...`);
+                  let summary = '';
+
+                  if (readmeContent) {
+                    const readmePreview = readmeContent.substring(0, 100).replace(/\n/g, ' ').trim();
+                    safeLogger.info(`  ✓ README found (${readmeContent.length} chars), preview: "${readmePreview}..."`);
+                    safeLogger.info(`  🤖 [${repo.full_name}] Generating AI summary from README...`);
+                    const startTime = Date.now();
+                    summary = await summarizer.summarizeReadme(repo.full_name, readmeContent);
+                    const duration = Date.now() - startTime;
+                    safeLogger.info(`  ✓ Summary generated (${summary.length} chars) in ${duration}ms`);
+                    if (summary) {
+                      safeLogger.info(`  📝 [${repo.full_name}] Summary: ${summary.substring(0, 100)}...`);
+                    } else {
+                      safeLogger.warn(`  ⚠ [${repo.full_name}] Summary is empty`);
+                    }
                   } else {
-                    safeLogger.warn(`  ⚠ [${repo.full_name}] Summary is empty`);
+                    safeLogger.warn(`  ✗ No README found for ${repo.full_name}`);
+                    safeLogger.info(`  🤖 [${repo.full_name}] Generating AI summary from metadata...`);
+                    const startTime = Date.now();
+                    summary = await summarizer.generateSummary(repo);
+                    const duration = Date.now() - startTime;
+                    safeLogger.info(`  ✓ Summary generated (${summary.length} chars) in ${duration}ms`);
+                    if (summary) {
+                      safeLogger.info(`  📝 [${repo.full_name}] Summary: ${summary.substring(0, 100)}...`);
+                    } else {
+                      safeLogger.warn(`  ⚠ [${repo.full_name}] Summary is empty`);
+                    }
                   }
-                } else {
-                  safeLogger.warn(`  ✗ No README found for ${repo.full_name}`);
-                  safeLogger.info(`  🤖 [${repo.full_name}] Generating AI summary from metadata...`);
-                  const startTime = Date.now();
-                  summary = await summarizer.generateSummary(repo);
-                  const duration = Date.now() - startTime;
-                  safeLogger.info(`  ✓ Summary generated (${summary.length} chars) in ${duration}ms`);
-                  if (summary) {
-                    safeLogger.info(`  📝 [${repo.full_name}] Summary: ${summary.substring(0, 100)}...`);
-                  } else {
-                    safeLogger.warn(`  ⚠ [${repo.full_name}] Summary is empty`);
-                  }
+
+                  return { ...repo, ai_summary: summary };
+                } catch (error) {
+                  safeLogger.error(`  ❌ [${repo.full_name}] Failed to generate summary: ${error}`);
+                  return { ...repo, ai_summary: '' };
                 }
+              })
+            );
 
-                return { ...repo, ai_summary: summary };
-              } catch (error) {
-                safeLogger.error(`  ❌ [${repo.full_name}] Failed to generate summary: ${error}`);
-                return { ...repo, ai_summary: '' };
+            // Collect results from this batch
+            for (const result of batchResults) {
+              if (result.status === 'fulfilled') {
+                reposWithSummary.push(result.value);
               }
-            })
-          );
-
-          // Collect results from this batch
-          for (const result of batchResults) {
-            if (result.status === 'fulfilled') {
-              reposWithSummary.push(result.value);
             }
           }
+        } else {
+          safeLogger.info('No new repositories to generate summaries for - all seen repositories can use cached summaries');
         }
 
         // Push to channels
-        const seenWithSummary = alreadySeen.map(r => ({
+        // seenButNotPush: 使用历史摘要，放在"持续霸榜项目"中
+        const seenWithSummary = seenButNotPush.map(r => ({
           ...r,
           ai_summary: historyManager.getProject(r.full_name)?.ai_summary || ''
         }));
+
+        safeLogger.info(`Summary generation complete - ${reposWithSummary.length} with AI summaries, ${seenWithSummary.length} using cached summaries`);
+        safeLogger.info(`  - 新上榜项目: ${reposWithSummary.filter(r => newlySeenOnly.some(n => n.full_name === r.full_name)).length}`);
+        safeLogger.info(`  - 重新推送的霸榜项目: ${reposWithSummary.filter(r => seenAndPush.some(s => s.full_name === r.full_name)).length}`);
+        safeLogger.info(`  - 无需重新推送的霸榜项目: ${seenWithSummary.length}`);
 
         const pushResults: { channel: string; success: boolean; messageId?: string; error?: string }[] = [];
 
@@ -608,14 +684,18 @@ Cron 表达式格式：
               }
 
               // Build email config for EmailChannel
+              // 修复: 使用 STARTTLS (port 587) 而不是 SSL (port 465)
               const emailChannelConfig = {
                 from: emailConfig.sender || '',
                 to: emailTo,
-                subject: `GitHub Trending ${since === 'daily' ? 'Daily' : since === 'weekly' ? 'Weekly' : 'Monthly'}`,
+                subject: `GitHub 热榜 ${since === 'daily' ? '今日' : since === 'weekly' ? '本周' : '本月'}推送`,
                 smtp: {
-                  host: emailConfig.smtp_host || 'smtp.gmail.com',
+                  host: emailConfig.smtp_host || 'smtp.qq.com',
+                  // 默认使用 587 端口 + STARTTLS，这是更可靠的配置
                   port: emailConfig.smtp_port || 587,
-                  secure: emailConfig.use_tls !== false,
+                  // secure=false 表示使用 STARTTLS (端口 587)
+                  // secure=true 表示使用 SMTPS (端口 465)
+                  secure: (emailConfig.smtp_port || 587) === 465,
                   auth: {
                     user: emailConfig.sender || '',
                     pass: emailConfig.password
@@ -668,7 +748,8 @@ Cron 表达式格式：
 
         // Update history - 需要保存所有仓库（包括已推送的、新发现的、和已见过的）
         // markPushed 会为每个仓库创建/更新记录
-        historyManager.markPushed([...reposWithSummary, ...alreadySeen]);
+        // 注意：这里只需要标记 actually pushed 的仓库（reposWithSummary）
+        historyManager.markPushed(reposWithSummary);
 
         // 同时保存到两个存储后端（冗余）
         const savePromises: Promise<void>[] = [];
@@ -714,15 +795,20 @@ Cron 表达式格式：
         safeLogger.info('📊 History persistence complete', {
           totalReposInHistory: Object.keys(historyManager['data'].repositories).length,
           newlyPushed: reposWithSummary.length,
-          alreadySeen: alreadySeen.length
+          newOnly: newlySeenOnly.length,
+          seenAndPushed: seenAndPush.length,
+          seenButNotPushed: seenButNotPush.length,
+          totalReposWithHistory: seenWithSummary.length
         });
 
         // Calculate result statistics
         const successCount = pushResults.filter(r => r.success).length;
         const failedCount = pushResults.filter(r => !r.success).length;
         const pushedCount = reposWithSummary.length;
-        const newCount = newlySeen.length;
-        const seenCount = alreadySeen.length;
+        // newCount 应该只包含新发现的项目（不包括重新推送的霸榜项目）
+        const newCount = newlySeenOnly.length;
+        // seenCount 应该包含重新推送的霸榜项目 + 无需重新推送的霸榜项目
+        const seenCount = seenAndPush.length + seenButNotPush.length;
         const totalCount = repositories.length;
 
         // Build response

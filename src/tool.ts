@@ -8,6 +8,7 @@ import { RepositoryInfo } from './models/repository';
 import { GitHubTrendingParams, GitHubTrendingResult, PluginConfig, AIConfig, FeishuConfig, EmailConfig } from './models/config';
 import { PushResult } from './channels/types';
 import { EmailConfig as EmailSendConfig } from './channels/email';
+import { FileStorageManager, getStorageManager } from './core/file-storage';
 
 /**
  * GitHub Trending Tool
@@ -166,8 +167,27 @@ async function githubTrendingHandler(
 
   // Step 3: Initialize history manager and separate new/seen repositories
   const historyManager = new HistoryManager();
-  if (historyData) {
-    historyManager.importData(historyData);
+
+  // Load history from file storage (primary source)
+  let loadedHistoryData = historyData;
+
+  if (!loadedHistoryData) {
+    try {
+      const storageManager = getStorageManager('openclaw-github-trending');
+      loadedHistoryData = await storageManager.get('github-trending-history');
+      if (loadedHistoryData) {
+        console.log('[History Manager] ✅ History loaded from file storage');
+      }
+    } catch (error) {
+      console.log('[History Manager] ⚠️  Failed to load history from file storage:', error instanceof Error ? error.message : error);
+    }
+  }
+
+  if (loadedHistoryData) {
+    historyManager.importData(loadedHistoryData);
+    console.log('[History Manager] ✅ History manager initialized with data');
+  } else {
+    console.log('[History Manager] ⚠️  No history data found - starting fresh');
   }
 
   // Categorize repositories with proper history config from plugin
@@ -191,42 +211,80 @@ async function githubTrendingHandler(
     historyConfig
   );
 
-  console.log(`[History Manager] Results - New: ${newlySeen.length}, Should Push: ${shouldPush.length}, Already Seen: ${alreadySeen.length}`);
-  if (newlySeen.length > 0) {
-    console.log('[History Manager] Newly seen repositories:');
-    newlySeen.forEach((repo, i) => console.log(`  ${i + 1}. ${repo.full_name} (${repo.stars} stars)`));
+  // Split alreadySeen into two categories:
+  // - seenButNotPush: 已见过但不需要重新推送（使用历史摘要，放在"持续霸榜项目"中）
+  // - seenAndPush: 已见过且需要重新推送（重新生成摘要，放在"新上榜项目"中）
+  const seenButNotPush: RepositoryInfo[] = [];
+  const seenAndPush: RepositoryInfo[] = [];
+  const newlySeenOnly: RepositoryInfo[] = [];
+
+  for (const repo of shouldPush) {
+    const isAlreadySeen = alreadySeen.some(r => r.full_name === repo.full_name);
+    if (isAlreadySeen) {
+      seenAndPush.push(repo);
+    } else {
+      newlySeenOnly.push(repo);
+    }
   }
-  if (alreadySeen.length > 0) {
-    console.log('[History Manager] Already seen repositories:');
-    alreadySeen.forEach((repo, i) => {
+
+  for (const repo of alreadySeen) {
+    if (!shouldPush.some(r => r.full_name === repo.full_name)) {
+      seenButNotPush.push(repo);
+    }
+  }
+
+  console.log(`[History Manager] Results:`);
+  if (newlySeenOnly.length > 0) {
+    console.log(`  ➕ 新上榜项目 (${newlySeenOnly.length}):`);
+    newlySeenOnly.forEach((repo, i) => console.log(`     ${i + 1}. ${repo.full_name} (${repo.stars} stars)`));
+  }
+  if (seenAndPush.length > 0) {
+    console.log(`  🔄 持续霸榜且需要重新推送 (${seenAndPush.length}):`);
+    seenAndPush.forEach((repo, i) => {
       const history = historyManager.getProject(repo.full_name);
       const starsDiff = repo.stars - (history?.last_stars || 0);
-      console.log(`  ${i + 1}. ${repo.full_name} (${repo.stars} stars, +${starsDiff} since last push)`);
+      console.log(`     ${i + 1}. ${repo.full_name} (${repo.stars} stars, +${starsDiff} since last push)`);
+    });
+  }
+  if (seenButNotPush.length > 0) {
+    console.log(`  ⏸️  持续霸榜无需推送 (${seenButNotPush.length}):`);
+    seenButNotPush.forEach((repo, i) => {
+      const history = historyManager.getProject(repo.full_name);
+      const starsDiff = repo.stars - (history?.last_stars || 0);
+      console.log(`     ${i + 1}. ${repo.full_name} (${repo.stars} stars, +${starsDiff} since last push)`);
     });
   }
 
   // Step 4: Get max workers from config and generate AI summaries for repositories to push
+  // Only generate summaries for newly seen repos and seen repos that need re-pushing
   const maxWorkers = ConfigManager.getMaxWorkers(pluginConfig);
-  console.log(`[AI Summarizer] Using ${maxWorkers} concurrent workers for ${shouldPush.length} repositories`);
+  const totalReposToSummarize = newlySeenOnly.length + seenAndPush.length;
+  const reposToSummarize = [...newlySeenOnly, ...seenAndPush];
+  console.log(`[AI Summarizer] Using ${maxWorkers} concurrent workers for ${totalReposToSummarize} repositories (${newlySeenOnly.length} newly seen + ${seenAndPush.length} seen with star growth)`);
 
   let processedRepositories: RepositoryInfo[] = [];
   const startTime = Date.now();
 
-  try {
-    processedRepositories = await processRepositoriesWithAI(shouldPush, summarizer, maxWorkers);
-  } catch (error) {
-    // Continue with empty summaries if AI processing fails
-    processedRepositories = shouldPush.map((r: RepositoryInfo) => ({ ...r, ai_summary: '' }));
+  if (totalReposToSummarize > 0) {
+    try {
+      processedRepositories = await processRepositoriesWithAI(reposToSummarize, summarizer, maxWorkers);
+    } catch (error) {
+      // Continue with empty summaries if AI processing fails
+      processedRepositories = reposToSummarize.map((r: RepositoryInfo) => ({ ...r, ai_summary: '' }));
+    }
+  } else {
+    console.log(`[AI Summarizer] ⏸️  No new repositories to summarize - all can use cached summaries`);
   }
 
-  const summaryDuration = Date.now() - startTime;
-  console.log(`[AI Summarizer] ✅ All summaries generated in ${summaryDuration}ms (${summaryDuration / shouldPush.length}ms per repo on average)`);
+  const summaryDuration = totalReposToSummarize > 0 ? Date.now() - startTime : 0;
+  console.log(`[AI Summarizer] ✅ Summaries generated in ${summaryDuration}ms (${totalReposToSummarize > 0 ? summaryDuration / totalReposToSummarize : 0}ms per repo on average)`);
 
   // Update history
   historyManager.markPushed(processedRepositories);
 
   // Prepare seen repositories with AI summaries from history (skip AI generation)
-  const seenReposWithSummary = alreadySeen.map((r: RepositoryInfo) => {
+  // seenButNotPush: 使用历史摘要，放在"持续霸榜项目"中
+  const seenReposWithSummary = seenButNotPush.map((r: RepositoryInfo) => {
     const history = historyManager.getProject(r.full_name);
     const summary = history?.ai_summary || '';
     if (summary) {
@@ -242,10 +300,12 @@ async function githubTrendingHandler(
 
   // Display summary statistics
   console.log(`\n[Summary Statistics]`);
-  console.log(`  - New repositories processed with AI: ${processedRepositories.length}`);
-  console.log(`  - Already seen repositories (using cached summaries): ${alreadySeen.length}`);
-  console.log(`  - Total repositories to push: ${processedRepositories.length}`);
-  console.log(`  - Total repositories shown: ${processedRepositories.length + alreadySeen.length}`);
+  console.log(`  - 总仓库数: ${repositories.length}`);
+  console.log(`  - 新上榜项目: ${newlySeenOnly.length}`);
+  console.log(`  - 持续霸榜需重新推送: ${seenAndPush.length}`);
+  console.log(`  - 持续霸榜无需重新推送: ${seenButNotPush.length}`);
+  console.log(`  - 生成 AI 摘要: ${processedRepositories.length}`);
+  console.log(`  - 使用历史摘要: ${seenReposWithSummary.length}`);
 
   // Step 5: Push to each channel
   const pushResults: { channel: string; success: boolean; messageId?: string; error?: string }[] = [];
@@ -259,6 +319,7 @@ async function githubTrendingHandler(
   console.log(`  - Oldest entry: ${historyStats.oldest_entry || 'N/A'}`);
   console.log(`  - Newest entry: ${historyStats.newest_entry || 'N/A'}`);
 
+  // 推送时使用 processedRepositories (新项目 + 重新推送的霸榜项目) 和 seenReposWithSummary (无需重新推送的霸榜项目)
   for (const targetChannel of targetChannels) {
     try {
       if (targetChannel === 'feishu') {
@@ -294,7 +355,7 @@ async function githubTrendingHandler(
         const internalEmailConfig: EmailSendConfig = {
           from: emailConfig.sender,
           to: emailTo,
-          subject: `GitHub ${since === 'daily' ? '今日' : since === 'weekly' ? '本周' : '本月'}热榜推送`,
+          subject: `GitHub ${since === 'daily' ? '今日热榜' : since === 'weekly' ? '本周热榜' : '本月热榜'}推送`,
           smtp: {
             host: emailConfig.smtp_host,
             port: emailConfig.smtp_port,
@@ -356,8 +417,10 @@ async function githubTrendingHandler(
   return {
     success: successCount > 0,
     pushed_count: processedRepositories.length,
-    new_count: newlySeen.length,
-    seen_count: alreadySeen.length,
+    // new_count 应该只包含新发现的项目（不包括重新推送的霸榜项目）
+    new_count: newlySeenOnly.length,
+    // seen_count 应该包含重新推送的霸榜项目 + 无需重新推送的霸榜项目
+    seen_count: seenAndPush.length + seenButNotPush.length,
     total_count: repositories.length,
     pushed_to: successChannels.join(','),
     timestamp: new Date().toISOString(),

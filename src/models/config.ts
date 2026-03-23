@@ -31,7 +31,6 @@ export interface FeishuConfig {
 export interface EmailConfig {
   smtp_host?: string;
   smtp_port?: number;
-  use_tls?: boolean;
   sender?: string;
   password?: string;
   from_name?: string;

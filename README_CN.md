@@ -93,7 +93,7 @@ openclaw plugins install openclaw-github-trending
             },
             "email": {
               "smtp_host": "smtp.qq.com",
-              "smtp_port": 587,
+              "smtp_port": 587, // 建议 QQ 邮箱的话优先使用 587 端口
               "sender": "xxx@qq.com",
               "password": "xxx",
               "recipient": "yyy@qq.com"
@@ -356,8 +356,7 @@ openclaw cron rm <job-id>
 | 字段 | 类型 | 必填 | 默认值 | 说明 |
 |-------|------|----------|---------|-------------|
 | `smtp_host` | string | 否 | `"smtp.gmail.com"` | SMTP 服务器地址 |
-| `smtp_port` | number | 否 | `587` | SMTP 服务器端口 |
-| `use_tls` | boolean | 否 | `true` | 使用 TLS/STARTTLS |
+| `smtp_port` | number | 否 | `587` | SMTP 服务器端口（465 为 SSL，587 为 STARTTLS） |
 | `sender` | string | 是* | - | 发件人邮箱地址 |
 | `password` | string | 是* | - | 邮箱密码或应用专用密码 |
 | `recipient` | string | 否 | 同 `sender` | 收件人邮箱地址（如未配置，默认使用发件人地址） |

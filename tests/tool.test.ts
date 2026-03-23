@@ -317,7 +317,6 @@ describe('githubTrendingTool', () => {
         detectSpy.mockReturnValue({
           smtp_host: 'smtp.gmail.com',
           smtp_port: 587,
-          use_tls: true,
           sender: 'user@example.com',
           password: 'password',
           from_name: 'GitHub Trending'
@@ -372,7 +371,6 @@ describe('githubTrendingTool', () => {
         spy.mockReturnValue({
           smtp_host: 'smtp.gmail.com',
           smtp_port: 587,
-          use_tls: true,
           sender: 'user@example.com',
           password: 'password',
           from_name: 'GitHub Trending'
@@ -411,7 +409,6 @@ describe('githubTrendingTool', () => {
         spy.mockReturnValue({
           smtp_host: 'smtp.gmail.com',
           smtp_port: 587,
-          use_tls: true,
           sender: 'user@example.com',
           password: 'password',
           from_name: 'GitHub Trending'
@@ -450,7 +447,6 @@ describe('githubTrendingTool', () => {
         spy.mockReturnValue({
           smtp_host: 'smtp.gmail.com',
           smtp_port: 587,
-          use_tls: true,
           sender: 'user@example.com',
           password: 'password',
           from_name: 'GitHub Trending'
@@ -489,7 +485,6 @@ describe('githubTrendingTool', () => {
         spy.mockReturnValue({
           smtp_host: 'smtp.gmail.com',
           smtp_port: 587,
-          use_tls: true,
           sender: 'user@example.com',
           password: 'password',
           from_name: 'GitHub Trending'

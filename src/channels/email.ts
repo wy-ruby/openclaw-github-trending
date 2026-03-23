@@ -474,7 +474,7 @@ export class EmailChannel {
           ${contentHTML}
           <footer class="footer">
             <p>本邮件由 GitHub 热榜机器人自动生成</p>
-            <p><a href="https://github.com/indigos" class="link" aria-label="访问 GitHub Trending 主页">GitHub Trending</a></p>
+            <p><a href="https://github.com/wy-ruby/openclaw-github-trending" class="link" aria-label="访问 GitHub Trending 主页">GitHub Trending</a></p>
           </footer>
         </div>
       </body>
@@ -562,7 +562,7 @@ export class EmailChannel {
           user: config.smtp.auth.user,
           pass: config.smtp.auth.pass
         },
-        logger: false,
+        logger: true,
         debug: false
       });
 
