@@ -100,7 +100,7 @@ openclaw plugins install openclaw-github-trending
             },
             "wechat": {
               "enabled": true,
-              "receiver_id":"your-wechat-user-id@imwechat", // 微信用户 id                            
+              "receiver_id": "your-wechat-user-id@imwechat", // 微信用户 id                            
               "bot_account_id": "your-bot-account-id-im-bot" // 微信机器人账号 id
             }
           },
@@ -427,17 +427,27 @@ openclaw cron rm <job-id>
    - 登录后，消息将发送到配置的微信账号
 
 5. **使用方法**：
-   ```bash
-   # 发送到微信
-   openclaw gen-cron now daily wechat
+   **⚠️ 重要：微信推送仅支持在 OpenClaw 聊天环境中使用，不支持 CLI 模式（`openclaw gen-cron` 命令）**
 
-   # 同时发送到多个渠道包括微信
-   openclaw gen-cron now daily email,feishu,wechat
+   **在 OpenClaw 聊天中使用**（推荐）：
+   ```text
+   使用 openclaw-github-trending 工具获取今日热榜并推送到微信
+   或
+   立即执行：获取今日热榜并推送到微信
+   ```
+
+   **在聊天中创建定时任务**：
+   ```bash
+   openclaw cron add --name "GitHub 热榜 每日 微信" \
+     --cron "0 18 * * *" \
+     --system-event '{"tool":"openclaw-github-trending","params":{"since":"daily","channels":["wechat"]}}'
    ```
 
 **注意事项：**
 - 微信通知以 Markdown 格式发送到您的个人微信账号
 - 消息包含新项目（完整 AI 摘要）和持续霸榜项目（简要摘要）
+- 微信推送功能依赖 @tencent-weixin/openclaw-weixin 插件提供的 `executeTool` API
+- CLI 模式下使用微信通道会返回错误提示
 - 如果微信插件未安装或未配置，插件会显示警告但继续向其他渠道推送
 
 *使用该渠道时必填

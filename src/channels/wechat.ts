@@ -134,7 +134,8 @@ export class WeChatChannel {
    * The plugin should be installed and configured in OpenClaw
    *
    * @param markdownContent Markdown content to send
-   * @param openclawApi OpenClaw API instance for invoking tools
+   * @param openclawApi OpenClaw API instance for invoking channels
+   * @param config WeChat configuration
    * @returns Push result
    */
   static async send(
@@ -158,38 +159,37 @@ export class WeChatChannel {
         botAccountId: wechatBotAccountId
       });
 
-      // 使用 OpenClaw system-event 发送微信消息
-      // 格式参考: {
-      //   "action": "send",
-      //   "channel": "openclaw-weixin",
-      //   "to": "微信 ID（接收者）",
-      //   "accountId": "机器人账号 ID",
-      //   "message": "推送内容"
-      // }
+      // 检查 openclawApi 是否包含 channels
+      if (!openclawApi || !openclawApi.channels) {
+        logger.error('openclawApi.channels not available');
+        return {
+          success: false,
+          error: 'openclawApi.channels not available - WeChat plugin may not be installed'
+        };
+      }
 
-      const systemEventParams = {
-        action: 'send',
-        channel: 'openclaw-weixin',
+      // 获取微信 channel 实例
+      const wechatChannel = openclawApi.channels['openclaw-weixin'];
+      if (!wechatChannel) {
+        logger.error('WeChat channel "openclaw-weixin" not found');
+        return {
+          success: false,
+          error: 'WeChat channel "openclaw-weixin" not found - please install and configure the plugin'
+        };
+      }
+
+      // 直接调用微信 channel 的 send 方法
+      // OpenClaw 的 channel API 通常有 send 方法
+      logger.debug('Invoking WeChat channel send...', {
+        receiverId: wechatReceiverId,
+        botAccountId: wechatBotAccountId,
+        messageLength: markdownContent.length
+      });
+
+      const sendResult = await wechatChannel.send({
         to: wechatReceiverId,
         accountId: wechatBotAccountId,
         message: markdownContent
-      };
-
-      logger.debug('Invoking OpenClaw system-event for WeChat...', {
-        params: {
-          action: systemEventParams.action,
-          channel: systemEventParams.channel,
-          to: systemEventParams.to,
-          accountId: systemEventParams.accountId,
-          message: `${markdownContent.length} chars`
-        }
-      });
-
-      // 通过 executeTool 调用 system-event 工具
-      // OpenClaw 的 system-event 工具用于发送系统级消息到指定通道
-      const sendResult = await openclawApi.executeTool({
-        tool_name: 'system-event',
-        params: systemEventParams
       });
 
       const duration = Date.now() - startTime;

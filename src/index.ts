@@ -42,7 +42,8 @@ export default function (api: any) {
   channels  推送渠道（多个渠道用逗号分隔）
             - email    推送到邮箱
             - feishu   推送到飞书
-            - email,feishu  同时推送到邮箱和飞书
+            - wechat   推送到微信
+            - email,feishu,wechat  同时推送到邮箱、飞书和微信
 
 Cron 表达式格式：
   格式：分(0-59) 时(0-23) 日(1-31) 月(1-12) 周(0-7, 0和7都是周日)
@@ -63,8 +64,8 @@ Cron 表达式格式：
   # 创建定时任务：每月 1 号 9:00 获取本月热榜并推送到邮箱和飞书
   openclaw gen-cron "0 9 1 * *" monthly email,feishu
 
-  # 创建定时任务：每天早上 8:00 获取今日热榜并推送到邮箱
-  openclaw gen-cron "0 8 * * *" daily email
+  # 创建定时任务：每天早上 8:00 获取今日热榜并推送到邮箱和微信
+  openclaw gen-cron "0 8 * * *" daily email,wechat
 
 提示：
   - 推送渠道需要在 ~/.openclaw/openclaw.json 中配置

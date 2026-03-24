@@ -387,19 +387,25 @@ async function githubTrendingHandler(
           continue;
         }
 
-        console.log('[WeChat Channel] Sending to WeChat via openclaw-weixin plugin...');
+        // WeChat channel requires OpenClaw runtime context with channels available
+        // The openclaw-weixin plugin should be installed and configured
+        const channels = (openclawConfig as any).channels || (openclawConfig as any).api?.channels;
+
+        if (!channels) {
+          pushResults.push({
+            channel: 'wechat',
+            success: false,
+            error: 'channels not available - WeChat plugin may not be installed'
+          });
+          pushLogs.push('[WeChat Channel] ❌ 推送失败: WeChat plugin not available');
+          continue;
+        }
 
         // Build markdown content
         const markdownContent = WeChatChannel.buildMarkdown(processedRepositories, seenReposWithSummary, since);
 
-        console.log(`[WeChat Channel] Markdown content length: ${markdownContent.length} chars`);
-
-        // Try to send via WeChat plugin tool
-        const result = await WeChatChannel.send(markdownContent, { executeTool: async (params: any) => {
-          // This is a placeholder - the actual executeTool will be provided by OpenClaw at runtime
-          console.error('[WeChat Channel] executeTool not available in tool.ts');
-          throw new Error('executeTool not available');
-        } }, pluginConfig?.channels?.wechat || {});
+        // Send via WeChat channel using direct channel API
+        const result = await WeChatChannel.send(markdownContent, { channels }, wechatConfig || {});
 
         pushResults.push({
           channel: 'wechat',
@@ -408,9 +414,6 @@ async function githubTrendingHandler(
           error: result.error
         });
         pushLogs.push(`[WeChat Channel] ${result.success ? '✅ 推送成功' : '❌ 推送失败'}${result.error ? ': ' + result.error : ''}`);
-        if (!result.success) {
-          pushLogs.push('[WeChat Channel] ⚠️  可能是因为 @tencent-weixin/openclaw-weixin 插件未安装或未配置');
-        }
       }
     } catch (error) {
       pushResults.push({

@@ -424,17 +424,27 @@ The plugin supports OpenAI-compatible API providers. If not configured in the pl
    - After login, messages will be sent to the configured WeChat account
 
 5. **Usage**:
-   ```bash
-   # Send to WeChat
-   openclaw gen-cron now daily wechat
+   **⚠️ Important: WeChat notifications are only supported in OpenClaw chat context, not in CLI mode (`openclaw gen-cron` command)**
 
-   # Send to multiple channels including WeChat
-   openclaw gen-cron now daily email,feishu,wechat
+   **Use in OpenClaw Chat** (Recommended):
+   ```text
+   Use openclaw-github-trending tool to get today's trending and push to WeChat
+   or
+   Run immediately: Fetch today's trending and push to WeChat
+   ```
+
+   **Create scheduled task in chat**:
+   ```bash
+   openclaw cron add --name "GitHub Trending Daily WeChat" \
+     --cron "0 18 * * *" \
+     --system-event '{"tool":"openclaw-github-trending","params":{"since":"daily","channels":["wechat"]}}'
    ```
 
 **Notes:**
 - WeChat notifications are sent as markdown messages to your personal WeChat account
 - Messages include new repositories (with full AI summaries) and trending repositories (with brief summaries)
+- WeChat functionality depends on the `executeTool` API provided by @tencent-weixin/openclaw-weixin plugin
+- CLI mode will return an error when using WeChat channel
 - If the WeChat plugin is not installed or configured, the plugin will show a warning but continue with other channels
 
 *Required when using this channel
