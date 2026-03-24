@@ -11,7 +11,7 @@ OpenClaw plugin for fetching GitHub trending repositories and pushing to Feishu 
 
 - 🔥 **GitHub Trending** — Fetch trending repositories for today, this week, or this month
 - 🤖 **AI Summaries** — Generate intelligent summaries using OpenAI or Anthropic
-- 📢 **Multi-Channel Push** — Support Feishu and Email notifications
+- 📢 **Multi-Channel Push** — Support Feishu, Email, and WeChat notifications
 - 🔄 **Smart Deduplication** — Track repository history and re-push on significant star growth
 - ⏰ **Scheduled Tasks** — Integrate with OpenClaw's task scheduler for automated updates
 
@@ -86,7 +86,7 @@ This configuration tells OpenClaw to trust and allow loading this plugin. After 
           "max_workers": 5,
           // Optional: GitHub personal access token. Frequent calls may trigger rate limits, configuring this can avoid GitHub rate limits. Not recommended as this plugin is not called frequently.
           "github_token": "xxx",
-          // Required: Configure at least one channel (Feishu or Email), otherwise you won't receive notifications.
+          // Required: Configure at least one channel (Feishu, Email, or WeChat), otherwise you won't receive notifications.
           "channels": {
             "feishu": {
               "webhook_url": "https://open.feishu.cn/open-apis/bot/v2/hook/xxx"
@@ -97,6 +97,9 @@ This configuration tells OpenClaw to trust and allow loading this plugin. After 
               "sender": "xxx@qq.com",
               "password": "xxx",
               "recipient": "yyy@qq.com"
+            },
+            "wechat": {
+              "enabled": true
             }
           },
           // Optional: Enable history tracking for smart deduplication
@@ -175,7 +178,7 @@ openclaw gen-cron <mode> <since> <channels>
 |-----------|-------------|---------|
 | `mode` | Execution mode: `now` for immediate execution, or Cron expression (format: minute hour day month weekday) | `now`<br>`"0 10 * * 3"` |
 | `since` | Trending period: `daily` (today), `weekly` (this week), `monthly` (this month) | `daily` |
-| `channels` | Push channels: `email`, `feishu`, or `email,feishu` (multiple channels separated by comma) | `feishu`<br>`email,feishu` |
+| `channels` | Push channels: `email`, `feishu`, `wechat`, or `email,feishu,wechat` (multiple channels separated by comma) | `feishu`<br>`email,feishu,wechat` |
 
 **Cron Expression Format:**
 - Format: `minute(0-59) hour(0-23) day(1-31) month(1-12) weekday(0-7, 0 and 7 are Sunday)`
@@ -237,13 +240,19 @@ Use the openclaw-github-trending tool to help me create a scheduled task that pu
 // Multi-Channel Push
 - "Use the openclaw-github-trending tool to help me create a task to push daily trending to both Feishu and email every day at 8:00"
 - "I want to use the openclaw-github-trending tool to receive trending every day at 10:00, sent to both Feishu and my email"
+
+// WeChat Push
+- "Use the openclaw-github-trending tool to help me create a task to push GitHub daily trending to my WeChat every morning at 8:00"
+- "I want to use the openclaw-github-trending tool to receive weekly trending in my WeChat every Friday at 18:00"
+- "Use the openclaw-github-trending tool to create a scheduled task: fetch monthly trending every 1st day at 9:00 AM and push to WeChat"
+- "Use the openclaw-github-trending tool to help me create a task to push trending to Feishu, email, and WeChat every day at 10:00"
 ```
 
 **Intelligent Parsing Capabilities:**
 
 ✅ **Time Recognition**: Automatically parses time expressions like "every day at 8:00", "every Monday at 10:00", "1st of every month at 9:00"
 ✅ **Period Recognition**: Automatically identifies "today/daily"→`daily`, "this week/weekly"→`weekly`, "monthly"→`monthly`
-✅ **Channel Recognition**: Automatically identifies "email"→`email`, "feishu"→`feishu`, "feishu and email"→`["feishu","email"]`
+✅ **Channel Recognition**: Automatically identifies "email"→`email`, "feishu"→`feishu`, "wechat"→`wechat`, "feishu and email"→`["feishu","email"]`, "feishu, email, and wechat"→`["feishu","email","wechat"]`
 ✅ **Task Creation**: Automatically generates appropriate Cron expressions and creates scheduled tasks
 
 **Execution Flow:**
@@ -361,6 +370,72 @@ The plugin supports OpenAI-compatible API providers. If not configured in the pl
 | `recipient` | string | No | Same as `sender` | Recipient email address (if not configured, defaults to sender address) |
 | `from_name` | string | No | `"GitHub Trending"` | Display name for sender |
 | `timeout` | number | No | `30` | SMTP connection timeout in seconds |
+
+#### WeChat
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `enabled` | boolean | No | `false` | Enable WeChat notifications via @tencent-weixin/openclaw-weixin plugin |
+| `receiver_id` | string | No | - | WeChat receiver ID (format: `xxx@im.wechat`) |
+| `bot_account_id` | string | No | - | WeChat bot account ID (format: `xxx-im-bot`) |
+
+**WeChat Requirements:**
+
+1. **Install WeChat Plugin**:
+   ```bash
+   npm install @tencent-weixin/openclaw-weixin
+   ```
+
+2. **Configure in OpenClaw** (`~/.openclaw/openclaw.json`):
+   ```json
+   {
+     "plugins": {
+       "entries": {
+         "@tencent-weixin/openclaw-weixin": {
+           "enabled": true,
+           "config": {
+             "enable_login": true
+           }
+         },
+         "openclaw-github-trending": {
+           "enabled": true,
+           "config": {
+             "channels": {
+               "wechat": {
+                 "enabled": true,
+                 "receiver_id": "xxx@im.wechat",
+                 "bot_account_id": "xxx-im-bot"
+               }
+             }
+           }
+         }
+       }
+     }
+   }
+   ```
+
+3. **Configuration Options (choose one)**:
+   - **Config File (Recommended)**: Set `receiver_id` and `bot_account_id` in the `wechat` section of `openclaw.json`
+   - **Environment Variables**: Set `OPENCLAW_WECHAT_RECEIVER_ID` and `OPENCLAW_WECHAT_BOT_ACCOUNT_ID`
+   - **Default Values**: Use built-in default configuration (for testing only)
+
+4. **Login to WeChat**:
+   - OpenClaw will prompt you to scan QR code with your personal WeChat
+   - After login, messages will be sent to the configured WeChat account
+
+5. **Usage**:
+   ```bash
+   # Send to WeChat
+   openclaw gen-cron now daily wechat
+
+   # Send to multiple channels including WeChat
+   openclaw gen-cron now daily email,feishu,wechat
+   ```
+
+**Notes:**
+- WeChat notifications are sent as markdown messages to your personal WeChat account
+- Messages include new repositories (with full AI summaries) and trending repositories (with brief summaries)
+- If the WeChat plugin is not installed or configured, the plugin will show a warning but continue with other channels
 
 *Required when using this channel
 

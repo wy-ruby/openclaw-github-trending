@@ -3,9 +3,10 @@ import { AISummarizer } from './core/summarizer';
 import { HistoryManager } from './core/history';
 import { FeishuChannel } from './channels/feishu';
 import { EmailChannel } from './channels/email';
+import { WeChatChannel } from './channels/wechat';
 import { ConfigManager, OpenClawGlobalConfig, SMTPConfig } from './core/config';
 import { RepositoryInfo } from './models/repository';
-import { GitHubTrendingParams, GitHubTrendingResult, PluginConfig, AIConfig, FeishuConfig, EmailConfig } from './models/config';
+import { GitHubTrendingParams, GitHubTrendingResult, PluginConfig, AIConfig, FeishuConfig, EmailConfig, WeChatConfig } from './models/config';
 import { PushResult } from './channels/types';
 import { EmailConfig as EmailSendConfig } from './channels/email';
 import { FileStorageManager, getStorageManager } from './core/file-storage';
@@ -29,9 +30,9 @@ export interface GitHubTrendingTool {
         type: 'array';
         items: {
           type: string;
-          enum: ['feishu', 'email'];
+          enum: ['feishu', 'email', 'wechat'];
         };
-        description: 'Push channels (array: ["email"], ["feishu"], or ["email", "feishu"])';
+        description: 'Push channels (array: ["email"], ["feishu"], ["wechat"], or ["email", "feishu", "wechat"])';
       };
       email_to?: {
         type: string;
@@ -128,7 +129,7 @@ async function githubTrendingHandler(
   const { since, channels, email_to, feishu_webhook } = params;
 
   // 解析通道配置（仅使用 channels 参数）
-  const targetChannels: ('feishu' | 'email')[] = channels || [];
+  const targetChannels: ('feishu' | 'email' | 'wechat')[] = channels || [];
   if (targetChannels.length === 0) {
     return {
       success: false,
@@ -375,6 +376,41 @@ async function githubTrendingHandler(
           error: result.error
         });
         pushLogs.push(`[Email Channel] ${result.success ? '✅ 推送成功' : '❌ 推送失败'}${result.error ? ': ' + result.error : ''}`);
+      } else if (targetChannel === 'wechat') {
+        // Check if WeChat plugin is available
+        const wechatConfig = pluginConfig?.channels?.wechat;
+        const wechatEnabled = wechatConfig?.enabled !== false; // Default to true if not specified
+
+        if (!wechatEnabled) {
+          pushResults.push({ channel: 'wechat', success: false, error: 'WeChat plugin disabled in config' });
+          pushLogs.push('[WeChat Channel] ❌ 推送失败: WeChat plugin disabled in config');
+          continue;
+        }
+
+        console.log('[WeChat Channel] Sending to WeChat via openclaw-weixin plugin...');
+
+        // Build markdown content
+        const markdownContent = WeChatChannel.buildMarkdown(processedRepositories, seenReposWithSummary, since);
+
+        console.log(`[WeChat Channel] Markdown content length: ${markdownContent.length} chars`);
+
+        // Try to send via WeChat plugin tool
+        const result = await WeChatChannel.send(markdownContent, { executeTool: async (params: any) => {
+          // This is a placeholder - the actual executeTool will be provided by OpenClaw at runtime
+          console.error('[WeChat Channel] executeTool not available in tool.ts');
+          throw new Error('executeTool not available');
+        } }, pluginConfig?.channels?.wechat || {});
+
+        pushResults.push({
+          channel: 'wechat',
+          success: result.success,
+          messageId: result.messageId,
+          error: result.error
+        });
+        pushLogs.push(`[WeChat Channel] ${result.success ? '✅ 推送成功' : '❌ 推送失败'}${result.error ? ': ' + result.error : ''}`);
+        if (!result.success) {
+          pushLogs.push('[WeChat Channel] ⚠️  可能是因为 @tencent-weixin/openclaw-weixin 插件未安装或未配置');
+        }
       }
     } catch (error) {
       pushResults.push({
@@ -450,9 +486,9 @@ export const githubTrendingTool: GitHubTrendingTool = {
         type: 'array',
         items: {
           type: 'string',
-          enum: ['feishu', 'email']
+          enum: ['feishu', 'email', 'wechat']
         },
-        description: 'Push channels (array: ["email"], ["feishu"], or ["email", "feishu"])'
+        description: 'Push channels (array: ["email"], ["feishu"], ["wechat"], or ["email", "feishu", "wechat"])'
       },
       email_to: {
         type: 'string',

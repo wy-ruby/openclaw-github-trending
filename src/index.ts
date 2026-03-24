@@ -4,6 +4,7 @@ import { AISummarizer } from './core/summarizer';
 import { HistoryManager } from './core/history';
 import { FeishuChannel } from './channels/feishu';
 import { EmailChannel } from './channels/email';
+import { WeChatChannel } from './channels/wechat';
 import { ConfigManager, OpenClawGlobalConfig } from './core/config';
 import { RepositoryInfo } from './models/repository';
 import { PluginConfig, GitHubTrendingParams } from './models/config';
@@ -116,13 +117,18 @@ Cron 表达式格式：
           }
 
           // Validate channels
-          const validChannels = ['email', 'feishu'];
+          const validChannels = ['email', 'feishu', 'wechat'];
           const invalidChannels = channelList.filter(c => !validChannels.includes(c));
           if (invalidChannels.length > 0) {
             console.error(``);
             console.error(`❌ 错误：无效的渠道 "${invalidChannels.join(', ')}"`);
             console.error(``);
             console.error(`📌 可用渠道：${validChannels.join('、')}`);
+            console.error(``);
+            console.error(`💬 微信说明：`);
+            console.error(`   - 微信渠道依赖 @tencent-weixin/openclaw-weixin 插件`);
+            console.error(`   - 需要先在 OpenClaw 中配置并启用该插件`);
+            console.error(`   - 微信消息将通过该插件发送到您的个人微信`);
             console.error(``);
             process.exit(1);
           }
@@ -133,7 +139,12 @@ Cron 表达式格式：
 
             console.log(``);
             console.log(`🚀 正在获取 GitHub ${sinceLower === 'daily' ? '今日' : sinceLower === 'weekly' ? '本周' : '本月'} 热榜项目...`);
-            console.log(`📬 推送渠道：${channelList.map(c => c === 'feishu' ? '🚀 飞书' : '📧 邮箱').join(' + ')}`);
+            console.log(`📬 推送渠道：${channelList.map(c => {
+              if (c === 'feishu') return '🚀 飞书';
+              if (c === 'email') return '📧 邮箱';
+              if (c === 'wechat') return '💬 微信';
+              return c;
+            }).join(' + ')}`);
             console.log(``);
             console.log(`⏳ 抓取热榜项目并让 AI 进行总结可能需要 1-3 分钟，请稍候...`);
             console.log(``);
@@ -220,7 +231,12 @@ Cron 表达式格式：
                 console.log(`   新项目：${result.new_count} 个`);
                 console.log(`   已见过：${result.seen_count} 个`);
                 console.log(``);
-                console.log(`📬 请查看您的 ${channelList.map(c => c === 'feishu' ? '飞书' : '邮箱').join(' 和 ')}，查看详细推送内容。`);
+                console.log(`📬 请查看您的 ${channelList.map(c => {
+                  if (c === 'feishu') return '飞书';
+                  if (c === 'email') return '邮箱';
+                  if (c === 'wechat') return '微信';
+                  return c;
+                }).join(' 和 ')}，查看详细推送内容。`);
                 console.log(``);
                 process.exit(0);
               } else {
@@ -308,9 +324,9 @@ Cron 表达式格式：
           type: 'array',
           items: {
             type: 'string',
-            enum: ['feishu', 'email']
+            enum: ['feishu', 'email', 'wechat']
           },
-          description: 'Push channels: ["email"], ["feishu"], or ["email", "feishu"]'
+          description: 'Push channels: ["email"], ["feishu"], ["wechat"], or ["email", "feishu", "wechat"]'
         },
         email_to: {
           type: 'string',
@@ -400,7 +416,7 @@ Cron 表达式格式：
 
       // Parse channels (use params.channels, not context)
       // Handle both array format (from zod validation) and string format (from CLI cron job)
-      let targetChannels: ('feishu' | 'email')[] = [];
+      let targetChannels: ('feishu' | 'email' | 'wechat')[] = [];
 
       // Support both array format from zod validation and string format from CLI cron jobs
       if (channels) {
@@ -410,7 +426,7 @@ Cron 表达式格式：
         } else {
           // String format - this shouldn't happen with zod validation, but handle it just in case
           const stringChannels = String(channels).split(',').map(c => c.trim());
-          targetChannels = stringChannels.filter(c => c === 'feishu' || c === 'email') as ('feishu' | 'email')[];
+          targetChannels = stringChannels.filter(c => c === 'feishu' || c === 'email' || c === 'wechat') as ('feishu' | 'email' | 'wechat')[];
         }
       }
 
@@ -418,6 +434,7 @@ Cron 表达式格式：
         // Fallback to configured channels if not specified in params
         if (pluginConfig?.channels?.feishu?.webhook_url) targetChannels.push('feishu');
         if (pluginConfig?.channels?.email?.sender) targetChannels.push('email');
+        if (pluginConfig?.channels?.wechat?.enabled !== false) targetChannels.push('wechat');
       }
 
       if (targetChannels.length === 0) {
@@ -758,6 +775,47 @@ Cron 表达式格式：
                 safeLogger.info(`Check inbox: ${emailTo}`);
               } else {
                 safeLogger.error(`❌ Email send failed: ${result.error || 'Unknown error'}`);
+              }
+            } else if (targetChannel === 'wechat') {
+              // Check if WeChat plugin is available
+              const wechatConfig = pluginConfig?.channels?.wechat;
+              const wechatEnabled = wechatConfig?.enabled !== false; // Default to true if not specified
+
+              if (!wechatEnabled) {
+                safeLogger.warn('WeChat channel is disabled in config, skipping');
+                pushResults.push({ channel: 'wechat', success: false, error: 'WeChat plugin disabled' });
+                continue;
+              }
+
+              safeLogger.info(`Sending to WeChat via openclaw-weixin plugin...`);
+
+              // Build markdown content
+              const markdownContent = WeChatChannel.buildMarkdown(reposWithSummary, seenWithSummary, since as 'daily' | 'weekly' | 'monthly');
+
+              safeLogger.info(`Markdown content length: ${markdownContent.length} chars`);
+
+              // Try to send via WeChat plugin tool
+              const result = await WeChatChannel.send(markdownContent, api, pluginConfig?.channels?.wechat || {});
+
+              if (!result) {
+                safeLogger.error('WeChatChannel.send returned undefined!');
+                pushResults.push({ channel: 'wechat', success: false, error: 'Send returned undefined' });
+                continue;
+              }
+
+              pushResults.push({
+                channel: 'wechat',
+                success: result.success,
+                messageId: result.messageId,
+                error: result.error || undefined
+              });
+
+              if (result.success) {
+                safeLogger.info(`✅ WeChat message sent successfully!`);
+              } else {
+                safeLogger.warn(`⚠️ WeChat send failed: ${result.error || 'Unknown error'}`);
+                safeLogger.warn(`   This may be because the @tencent-weixin/openclaw-weixin plugin is not installed or not configured.`);
+                safeLogger.warn(`   Please ensure the WeChat plugin is installed and enabled in OpenClaw.`);
               }
             }
           } catch (error) {

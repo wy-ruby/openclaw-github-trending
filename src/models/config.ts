@@ -39,11 +39,21 @@ export interface EmailConfig {
 }
 
 /**
+ * WeChat channel configuration (uses @tencent-weixin/openclaw-weixin plugin)
+ */
+export interface WeChatConfig {
+  enabled?: boolean; // Plugin enabled status (controlled by OpenClaw plugin system)
+  receiver_id?: string; // WeChat user ID to receive messages
+  bot_account_id?: string; // WeChat bot account ID
+}
+
+/**
  * Channels configuration
  */
 export interface ChannelsConfig {
   feishu?: FeishuConfig;
   email?: EmailConfig;
+  wechat?: WeChatConfig;
 }
 
 /**
@@ -79,7 +89,7 @@ export interface PluginConfig {
  */
 export interface GitHubTrendingParams {
   since: 'daily' | 'weekly' | 'monthly';
-  channels?: ('feishu' | 'email')[];
+  channels?: ('feishu' | 'email' | 'wechat')[];
   email_to?: string;
   feishu_webhook?: string;
 }

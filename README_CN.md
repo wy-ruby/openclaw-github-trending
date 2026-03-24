@@ -11,7 +11,7 @@ OpenClaw 插件，用于获取 GitHub 趋势仓库并通过 AI 生成的摘要�
 
 - 🔥 **GitHub 热榜** — 获取今日、本周或本月热榜项目
 - 🤖 **AI 摘要** — 使用 OpenAI 或 Anthropic 生成智能摘要
-- 📢 **多渠道推送** — 支持飞书和邮件通知
+- 📢 **多渠道推送** — 支持飞书、邮件和微信通知
 - 🔄 **智能去重** — 追踪仓库历史，在 Star 大幅增长时重新推送
 - ⏰ **定时任务** — 与 OpenClaw 任务调度器集成，实现自动化更新
 
@@ -86,7 +86,7 @@ openclaw plugins install openclaw-github-trending
           "max_workers": 5,
           //  可选：GitHub 个人访问令牌，频繁调用可能会限制访问，配置后基本上可以避免触发 GitHub 速率限制。不建议配置，因为本身这个插件的调用频率也不高。
           "github_token": "xxx",
-          // 必须：配置一个通道（飞书或邮件），否则无法通知到你。
+          // 必须：配置一个通道（飞书、邮件或微信），否则无法通知到你。
           "channels": {
             "feishu": {
               "webhook_url": "https://open.feishu.cn/open-apis/bot/v2/hook/xxx"
@@ -97,6 +97,11 @@ openclaw plugins install openclaw-github-trending
               "sender": "xxx@qq.com",
               "password": "xxx",
               "recipient": "yyy@qq.com"
+            },
+            "wechat": {
+              "enabled": true,
+              "receiver_id":"your-wechat-user-id@imwechat", // 微信用户 id                            
+              "bot_account_id": "your-bot-account-id-im-bot" // 微信机器人账号 id
             }
           },
           // 可选：开启历史记录功能，用于智能去重
@@ -176,7 +181,7 @@ openclaw gen-cron <mode> <since> <channels>
 |------|------|------|
 | `mode` | 执行模式：`now` 表示立即执行，或 Cron 表达式（格式：分 时 日 月 周） | `now` <br> `"0 10 * * 3"` |
 | `since` | 热榜周期：`daily`（今日）、`weekly`（本周）、`monthly`（本月） | `daily` |
-| `channels` | 推送渠道：`email`、`feishu` 或 `email,feishu`（多个渠道用逗号分隔） | `email,feishu` |
+| `channels` | 推送渠道：`email`、`feishu`、`wechat` 或 `email,feishu,wechat`（多个渠道用逗号分隔） | `email,feishu,wechat` |
 
 **Cron 表达式格式：**
 - 格式：`分(0-59) 时(0-23) 日(1-31) 月(1-12) 周(0-7, 0和7都是周日)`
@@ -237,14 +242,20 @@ openclaw cron add --name "GitHub 热榜 每周 飞书+邮箱" \
 
 // 多渠道推送
 - "使用openclaw-github-trending工具，帮我创建每天 8:00 推送今日热榜到飞书和邮箱的任务"
-- "我想使用openclaw-github-trending工具，每天 10:00 收到热榜，同时发到飞书和我的邮箱" 
+- "我想使用openclaw-github-trending工具，每天 10:00 收到热榜，同时发到飞书和我的邮箱"
+
+// 微信推送
+- "使用openclaw-github-trending工具，帮我创建每天 8:00 推送今日热榜到微信的任务"
+- "我想使用openclaw-github-trending工具，每周五 18:00 收到本周热榜，发到我的微信"
+- "使用openclaw-github-trending工具，帮我创建每月 1 号 9:00 推送月榜到微信的任务"
+- "使用openclaw-github-trending工具，帮我创建每天 10:00 推送热榜到飞书、邮箱和微信的任务"
 ```
 
 **智能解析能力：**
 
 ✅ **时间识别**：自动解析"每天 8:00"、"每周一 10:00"、"每月 1 号 9:00"等时间表达
 ✅ **周期识别**：自动识别"今日/每天"→`daily`、"本周/每周"→`weekly`、"月榜/每月"→`monthly`
-✅ **渠道识别**：自动识别"邮箱"→`email`、"飞书"→`feishu`、"飞书和邮箱"→`["feishu","email"]`
+✅ **渠道识别**：自动识别"邮箱"→`email`、"飞书"→`feishu`、"微信"→`wechat`、"飞书和邮箱"→`["feishu","email"]`、"飞书、邮箱和微信"→`["feishu","email","wechat"]`
 ✅ **任务创建**：自动生成合适的 Cron 表达式并创建定时任务
 
 **执行流程：**
@@ -362,6 +373,72 @@ openclaw cron rm <job-id>
 | `recipient` | string | 否 | 同 `sender` | 收件人邮箱地址（如未配置，默认使用发件人地址） |
 | `from_name` | string | 否 | `"GitHub Trending"` | 发件人显示名称 |
 | `timeout` | number | 否 | `30` | SMTP 连接超时时间（秒） |
+
+#### 微信
+
+| 字段 | 类型 | 必填 | 默认值 | 说明 |
+|-------|------|----------|---------|-------------|
+| `enabled` | boolean | 否 | `false` | 通过 @tencent-weixin/openclaw-weixin 插件启用微信通知 |
+| `receiver_id` | string | 否 | - | 微信接收者 ID（格式：`xxx@im.wechat`） |
+| `bot_account_id` | string | 否 | - | 微信机器人账号 ID（格式：`xxx-im-bot`） |
+
+**微信推送配置要求：**
+
+1. **安装微信插件**：
+   ```bash
+   npm install @tencent-weixin/openclaw-weixin
+   ```
+
+2. **在 OpenClaw 中配置** (`~/.openclaw/openclaw.json`)：
+   ```json
+   {
+     "plugins": {
+       "entries": {
+         "@tencent-weixin/openclaw-weixin": {
+           "enabled": true,
+           "config": {
+             "enable_login": true
+           }
+         },
+         "openclaw-github-trending": {
+           "enabled": true,
+           "config": {
+             "channels": {
+               "wechat": {
+                 "enabled": true,
+                 "receiver_id": "xxx@im.wechat",
+                 "bot_account_id": "xxx-im-bot"
+               }
+             }
+           }
+         }
+       }
+     }
+   }
+   ```
+
+3. **配置方式（三选一）**：
+   - **配置文件（推荐）**：在 `openclaw.json` 的 `wechat` 配置中设置 `receiver_id` 和 `bot_account_id`
+   - **环境变量**：设置 `OPENCLAW_WECHAT_RECEIVER_ID` 和 `OPENCLAW_WECHAT_BOT_ACCOUNT_ID`
+   - **默认值**：使用内置默认配置（仅用于测试）
+
+4. **登录微信**：
+   - OpenClaw 会提示您使用个人微信扫描二维码
+   - 登录后，消息将发送到配置的微信账号
+
+5. **使用方法**：
+   ```bash
+   # 发送到微信
+   openclaw gen-cron now daily wechat
+
+   # 同时发送到多个渠道包括微信
+   openclaw gen-cron now daily email,feishu,wechat
+   ```
+
+**注意事项：**
+- 微信通知以 Markdown 格式发送到您的个人微信账号
+- 消息包含新项目（完整 AI 摘要）和持续霸榜项目（简要摘要）
+- 如果微信插件未安装或未配置，插件会显示警告但继续向其他渠道推送
 
 *使用该渠道时必填
 
