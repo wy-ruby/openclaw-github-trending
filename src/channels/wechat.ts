@@ -1,4 +1,3 @@
-import axios from 'axios';
 import { RepositoryInfo } from '../models/repository';
 import { PushResult } from './types';
 import { Logger } from '../utils/logger';
@@ -6,27 +5,23 @@ import { Logger } from '../utils/logger';
 const logger = Logger.get('WeChatChannel');
 
 /**
- * WeChat channel configuration interface
+ * WeChat channel configuration
  */
 export interface WeChatConfig {
-  plugin_enabled?: boolean; // 插件是否启用（由OpenClaw插件系统控制）
-  receiver_id?: string; // 微信用户ID，接收消息
-  bot_account_id?: string; // 微信机器人账号ID
+  enabled?: boolean;
+  receiver_id?: string;
+  bot_account_id?: string;
+  channel_name?: string;
 }
 
 /**
- * WeChat Channel for pushing GitHub trending repositories via personal WeChat
- * Uses the @tencent-weixin/openclaw-weixin plugin
+ * WeChat Channel - 通过企业微信推送 GitHub 热榜
  */
 export class WeChatChannel {
   /**
-   * Build markdown message for WeChat
-   * @param newRepositories Array of new repositories
-   * @param seenRepositories Array of seen repositories
-   * @param since Time period for trending
-   * @returns Markdown formatted message
+   * 构建纯文本消息（企业微信不支持 markdown）
    */
-  static buildMarkdown(
+  static buildPlainText(
     newRepositories: RepositoryInfo[],
     seenRepositories: RepositoryInfo[],
     since: 'daily' | 'weekly' | 'monthly' = 'monthly'
@@ -49,78 +44,117 @@ export class WeChatChannel {
     const lines: string[] = [];
 
     // Header
-    lines.push(`# GitHub ${sinceText}热榜推送`);
-    lines.push(``);
+    lines.push(`🚀 GitHub ${sinceText}热榜推送`);
     lines.push(`📅 ${dateStr}`);
-    lines.push(``);
+    lines.push('');
 
     // New repositories
     if (newRepositories.length > 0) {
-      lines.push(`## 🔥 新上榜项目 (${newRepositories.length})`);
-      lines.push(``);
+      lines.push(`━━━ 🔥 新上榜项目 (${newRepositories.length}) ━━━`);
+      lines.push('');
 
       newRepositories.forEach((repo, index) => {
         const formattedStars = WeChatChannel.formatNumberWithK(repo.stars);
         const formattedForks = repo.forks ? ` ⚡${WeChatChannel.formatNumberWithK(repo.forks)}` : '';
-        const language = repo.language ? ` 💻${repo.language}` : '';
+        const language = repo.language ? ` · ${repo.language}` : '';
 
-        lines.push(`### ${index + 1}. [${repo.full_name}](${repo.url})`);
+        lines.push(`【${index + 1}】${repo.full_name}`);
         lines.push(`⭐ ${formattedStars}${formattedForks}${language}`);
+        lines.push(repo.url);
 
         if (repo.ai_summary) {
-          lines.push(``);
-          lines.push(`🤖 **项目介绍：**`);
-          lines.push(repo.ai_summary);
+          lines.push('');
+          lines.push('🤖 项目介绍：');
+          const summaryLines = WeChatChannel.wrapText(repo.ai_summary, 50);
+          summaryLines.forEach(line => {
+            lines.push(`  ${line}`);
+          });
         }
 
-        lines.push(``);
+        if (index < newRepositories.length - 1) {
+          lines.push('');
+          lines.push('━━━');
+          lines.push('');
+        }
       });
     }
 
     // Seen repositories
     if (seenRepositories.length > 0) {
       if (newRepositories.length > 0) {
-        lines.push(``);
+        lines.push('');
+        lines.push('');
       }
 
-      lines.push(`## ⭐ 持续霸榜项目 (${seenRepositories.length})`);
-      lines.push(``);
+      lines.push(`━━━ ⭐ 持续霸榜项目 (${seenRepositories.length}) ━━━`);
+      lines.push('');
 
       seenRepositories.forEach((repo, index) => {
         const formattedStars = WeChatChannel.formatNumberWithK(repo.stars);
         const formattedForks = repo.forks ? ` ⚡${WeChatChannel.formatNumberWithK(repo.forks)}` : '';
-        const language = repo.language ? ` 💻${repo.language}` : '';
+        const language = repo.language ? ` · ${repo.language}` : '';
 
-        lines.push(`### ${index + 1}. [${repo.full_name}](${repo.url})`);
+        lines.push(`【${index + 1}】${repo.full_name}`);
         lines.push(`⭐ ${formattedStars}${formattedForks}${language}`);
+        lines.push(repo.url);
 
         if (repo.ai_summary) {
-          lines.push(``);
-          // Show only first sentence for seen repos
-          lines.push(`_${repo.ai_summary.split('。')[0]}。_`);
+          lines.push('');
+          const firstSentence = repo.ai_summary.split('.')[0] + '.';
+          const wrappedLines = WeChatChannel.wrapText(firstSentence, 50);
+          lines.push('🤖 简介：');
+          wrappedLines.forEach(line => {
+            lines.push(`  ${line}`);
+          });
         }
 
-        lines.push(``);
+        if (index < seenRepositories.length - 1) {
+          lines.push('');
+          lines.push('━━━');
+          lines.push('');
+        }
       });
     }
 
     // No repositories
     if (newRepositories.length === 0 && seenRepositories.length === 0) {
-      lines.push(`## 📌 暂无 trending 项目`);
+      lines.push('📌 暂无 trending 项目');
     }
 
     // Footer
-    lines.push(`---`);
-    lines.push(`✨ 本消息由 GitHub 热榜机器人自动生成`);
-    lines.push(`🔗 [GitHub Trending](https://github.com/wy-ruby/openclaw-github-trending)`);
+    lines.push('');
+    lines.push('');
+    lines.push('━━━━━━━━━━━━━━━━━━━━━━');
+    lines.push('✨ 本消息由 GitHub 热榜机器人自动生成');
+    lines.push('🔗 https://github.com/wy-ruby/openclaw-github-trending');
 
     return lines.join('\n');
   }
 
   /**
-   * Format number with 'k' suffix for thousands
-   * @param num Number to format
-   * @returns Formatted string
+   * 文本自动换行
+   */
+  static wrapText(text: string, maxWidth: number = 60): string[] {
+    const lines: string[] = [];
+    let currentLine = '';
+
+    const words = text.split(/(?<=[\u4e00-\u9fa5])|(?=[\u4e00-\u9fa5])|\s+/).filter(w => w);
+
+    for (const word of words) {
+      if ((currentLine + word).length <= maxWidth) {
+        currentLine += word;
+      } else {
+        if (currentLine) lines.push(currentLine.trim());
+        currentLine = word;
+      }
+    }
+
+    if (currentLine) lines.push(currentLine.trim());
+    return lines;
+  }
+
+  /**
+   * 格式化数字（添加 k 后缀）
    */
   static formatNumberWithK(num: number): string {
     if (num >= 1000) {
@@ -130,138 +164,108 @@ export class WeChatChannel {
   }
 
   /**
-   * Send message via OpenClaw WeChat plugin
-   * The plugin should be installed and configured in OpenClaw
-   *
-   * @param markdownContent Markdown content to send
-   * @param openclawApi OpenClaw API instance for invoking channels
-   * @param config WeChat configuration
-   * @returns Push result
+   * 发送消息到微信（通过 openclaw CLI）
    */
   static async send(
-    markdownContent: string,
+    content: string,
     openclawApi: any,
     config: WeChatConfig
   ): Promise<PushResult> {
-    logger.info('Starting WeChat send', {
-      contentLength: markdownContent.length
-    });
+    const startTime = Date.now();
 
-    try {
-      const startTime = Date.now();
+    const receiverId = config.receiver_id || process.env.OPENCLAW_WECHAT_RECEIVER_ID;
+    const botAccountId = config.bot_account_id || process.env.OPENCLAW_WECHAT_BOT_ACCOUNT_ID;
+    const channelName = config.channel_name || 'openclaw-weixin';
 
-      // 从配置文件中读取微信配置，如果没有则使用默认值
-      const wechatReceiverId = config.receiver_id || process.env.OPENCLAW_WECHAT_RECEIVER_ID;
-      const wechatBotAccountId = config.bot_account_id || process.env.OPENCLAW_WECHAT_BOT_ACCOUNT_ID;
-
-      logger.info('WeChat configuration', {
-        receiverId: wechatReceiverId,
-        botAccountId: wechatBotAccountId
-      });
-
-      // 检查 openclawApi 是否包含 channels
-      if (!openclawApi || !openclawApi.channels) {
-        logger.error('openclawApi.channels not available');
-        return {
-          success: false,
-          error: 'openclawApi.channels not available - WeChat plugin may not be installed'
-        };
-      }
-
-      // 获取微信 channel 实例
-      const wechatChannel = openclawApi.channels['openclaw-weixin'];
-      if (!wechatChannel) {
-        logger.error('WeChat channel "openclaw-weixin" not found');
-        return {
-          success: false,
-          error: 'WeChat channel "openclaw-weixin" not found - please install and configure the plugin'
-        };
-      }
-
-      // 直接调用微信 channel 的 send 方法
-      // OpenClaw 的 channel API 通常有 send 方法
-      logger.debug('Invoking WeChat channel send...', {
-        receiverId: wechatReceiverId,
-        botAccountId: wechatBotAccountId,
-        messageLength: markdownContent.length
-      });
-
-      const sendResult = await wechatChannel.send({
-        to: wechatReceiverId,
-        accountId: wechatBotAccountId,
-        message: markdownContent
-      });
-
-      const duration = Date.now() - startTime;
-
-      logger.info('WeChat send completed', {
-        durationMs: duration,
-        messageId: sendResult?.message_id || sendResult?.id || 'unknown',
-        success: true
-      });
-
-      return {
-        success: true,
-        messageId: sendResult?.message_id || sendResult?.id || 'unknown',
-        error: undefined
-      };
-    } catch (error) {
-      logger.error('WeChat send failed', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        stack: error instanceof Error ? error.stack : undefined
-      });
-
+    if (!receiverId) {
+      logger.error('WeChat receiver_id not configured');
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: 'WeChat receiver_id 未配置'
       };
     }
+
+    logger.info('Sending WeChat message', {
+      receiverId: receiverId ? `${receiverId.substring(0, 4)}****` : 'not set',
+      contentLength: content.length
+    });
+
+    const result = await this.sendViaCli(content, receiverId, botAccountId, channelName);
+
+    const duration = Date.now() - startTime;
+    if (result.success) {
+      logger.info('WeChat send completed', { durationMs: duration });
+    } else {
+      logger.error('WeChat send failed', {
+        durationMs: duration,
+        error: result.error
+      });
+    }
+
+    return result;
   }
 
   /**
-   * Alternative method: Use OpenClaw's chat interface to send message
-   * This sends the message as if the plugin itself is "chatting" to the user
-   *
-   * @param markdownContent Markdown content to send
-   * @param openclawApi OpenClaw API instance
-   * @returns Push result
+   * 通过 openclaw CLI 发送消息
    */
-  static async sendViaChat(
-    markdownContent: string,
-    openclawApi: any
+  private static async sendViaCli(
+    content: string,
+    to: string,
+    accountId: string | undefined,
+    channelName: string
   ): Promise<PushResult> {
-    logger.info('Starting WeChat send via chat interface', {
-      contentLength: markdownContent.length
-    });
-
     try {
-      const startTime = Date.now();
+      const { execFile } = await import('child_process');
 
-      // Use OpenClaw's chat API to send message
-      // This assumes the WeChat plugin is the active channel
-      const result = await openclawApi.chat(markdownContent);
+      const args = [
+        'message', 'send',
+        '--channel', channelName,
+        '--target', to,
+        '--message', content
+      ];
 
-      const duration = Date.now() - startTime;
+      if (accountId) {
+        args.push('--account', accountId);
+      }
 
-      logger.success('WeChat chat send completed', {
-        durationMs: duration,
-        messageId: result?.message_id || 'unknown'
+      logger.info('Executing CLI', {
+        channel: channelName,
+        to,
+        argsCount: args.length,
+        contentLength: content.length
+      });
+
+      const result = await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
+        execFile('openclaw', args, {
+          maxBuffer: 10 * 1024 * 1024,
+          timeout: 30000
+        }, (error, stdout, stderr) => {
+          if (error) {
+            reject(error);
+          } else {
+            resolve({ stdout, stderr });
+          }
+        });
+      });
+
+      logger.info('CLI send completed', {
+        stdout: result.stdout.substring(0, 200),
+        stderr: result.stderr ? result.stderr.substring(0, 200) : ''
       });
 
       return {
         success: true,
-        messageId: result?.message_id || 'unknown',
+        messageId: 'sent-via-cli',
         error: undefined
       };
     } catch (error) {
-      logger.error('WeChat chat send failed', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        stack: error instanceof Error ? error.stack : undefined
+      logger.error('CLI send failed', {
+        error: error instanceof Error ? error.message : 'Unknown error'
       });
 
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: `CLI 发送失败：${error instanceof Error ? error.message : 'Unknown error'}`
       };
     }
   }

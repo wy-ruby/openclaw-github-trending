@@ -790,13 +790,13 @@ Cron 表达式格式：
 
               safeLogger.info(`Sending to WeChat via openclaw-weixin plugin...`);
 
-              // Build markdown content
-              const markdownContent = WeChatChannel.buildMarkdown(reposWithSummary, seenWithSummary, since as 'daily' | 'weekly' | 'monthly');
+              // Build plain text content (optimized for WeChat)
+              const plainTextContent = WeChatChannel.buildPlainText(reposWithSummary, seenWithSummary, since as 'daily' | 'weekly' | 'monthly');
 
-              safeLogger.info(`Markdown content length: ${markdownContent.length} chars`);
+              safeLogger.info(`Content length: ${plainTextContent.length} chars`);
 
-              // Try to send via WeChat plugin tool
-              const result = await WeChatChannel.send(markdownContent, api, pluginConfig?.channels?.wechat || {});
+              // Send via WeChat channel
+              const result = await WeChatChannel.send(plainTextContent, api, pluginConfig?.channels?.wechat || {});
 
               if (!result) {
                 safeLogger.error('WeChatChannel.send returned undefined!');

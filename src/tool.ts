@@ -387,25 +387,12 @@ async function githubTrendingHandler(
           continue;
         }
 
-        // WeChat channel requires OpenClaw runtime context with channels available
-        // The openclaw-weixin plugin should be installed and configured
-        const channels = (openclawConfig as any).channels || (openclawConfig as any).api?.channels;
+        // Build plain text content (optimized for WeChat display)
+        const plainTextContent = WeChatChannel.buildPlainText(processedRepositories, seenReposWithSummary, since);
 
-        if (!channels) {
-          pushResults.push({
-            channel: 'wechat',
-            success: false,
-            error: 'channels not available - WeChat plugin may not be installed'
-          });
-          pushLogs.push('[WeChat Channel] ❌ 推送失败: WeChat plugin not available');
-          continue;
-        }
-
-        // Build markdown content
-        const markdownContent = WeChatChannel.buildMarkdown(processedRepositories, seenReposWithSummary, since);
-
-        // Send via WeChat channel using direct channel API
-        const result = await WeChatChannel.send(markdownContent, { channels }, wechatConfig || {});
+        // Send via WeChat channel using OpenClaw's sendMessage or CLI
+        // 传递 { config: openclawConfig } 模拟 api 对象，WeChatChannel.send 会从中获取 config 用于消息路由
+        const result = await WeChatChannel.send(plainTextContent, { config: openclawConfig }, wechatConfig || {});
 
         pushResults.push({
           channel: 'wechat',

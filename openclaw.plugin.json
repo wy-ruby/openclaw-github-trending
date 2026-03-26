@@ -1,7 +1,7 @@
 {
   "id": "openclaw-github-trending",
   "name": "GitHub Trending",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "description": "Fetch GitHub trending repositories and push to Feishu or Email with AI summaries",
   "author": "王允",
   "license": "MIT",
@@ -24,7 +24,10 @@
         "properties": {
           "provider": {
             "type": "string",
-            "enum": ["openai", "anthropic"],
+            "enum": [
+              "openai",
+              "anthropic"
+            ],
             "default": "openai",
             "description": "AI provider (OpenAI-compatible or Anthropic)"
           },
@@ -105,7 +108,10 @@
                 "description": "SMTP connection timeout in seconds"
               }
             },
-            "required": ["sender", "password"]
+            "required": [
+              "sender",
+              "password"
+            ]
           },
           "wechat": {
             "type": "object",
@@ -123,6 +129,10 @@
               "bot_account_id": {
                 "type": "string",
                 "description": "WeChat bot account ID"
+              },
+              "channel_name": {
+                "type": "string",
+                "description": "WeChat channel name for messages"
               }
             },
             "additionalProperties": false
