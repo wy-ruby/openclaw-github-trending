@@ -293,7 +293,12 @@ Cron 表达式格式：
             console.log(`📅 正在创建定时任务...`);
             console.log(`   热榜周期：${sinceLower === 'daily' ? '每日' : sinceLower === 'weekly' ? '每周' : '每月'}`);
             console.log(`   执行时间：${schedule}`);
-            console.log(`   推送渠道：${channelList.map(c => c === 'feishu' ? '🚀 飞书' : '📧 邮箱').join(' + ')}`);
+            console.log(`   推送渠道：${channelList.map(c => {
+              if (c === 'feishu') return '🚀 飞书';
+              if (c === 'email') return '📧 邮箱';
+              if (c === 'wechat') return '💬 微信';
+              return c;
+            }).join(' + ')}`);
             console.log(``);
 
             // Build tool params for cron job
