@@ -313,10 +313,13 @@ Cron 表达式格式：
             });
             const channelLabel = channelLabels.join('+');
             const jobName = `GitHub 热榜 ${periodLabel} ${channelLabel}`;
-
-            // 修复：使用自然语言格式而不是 JSON 格式，这样 Agent 可以正确理解和调用工具
-            const channelsParam = channelList.join(',');
-            const systemEventText = `请获取 GitHub ${sinceLower === 'daily' ? '今日' : sinceLower === 'weekly' ? '本周' : '本月'} 热榜项目，使用 openclaw-github-trending 工具，参数 since=${sinceLower}, channels=[${channelsParam}]，推送到${channelList.map(c => c === 'feishu' ? '飞书' : '邮箱').join('和')}`;
+            
+            // 修复：使用简洁的自然语言，避免特殊字符和过长文本
+            const sinceText = sinceLower === 'daily' ? '今日' : sinceLower === 'weekly' ? '本周' : '本月';
+            const channelText = channelLabels.join(',');
+            
+            // 简洁格式：使用 openclaw-github-trending 工具，获取本月热榜，推送到飞书，邮箱
+            const systemEventText = `使用 openclaw-github-trending 工具，获取${sinceText}热榜，推送到${channelText}`;
 
             // 修复：使用 spawn 而不是 exec，避免缓冲区限制，支持低内存服务器
             const cp = await import('child_process');
@@ -334,7 +337,7 @@ Cron 表达式格式：
                   '--system-event', systemEventText
                 ], {
                   stdio: ['ignore', 'pipe', 'pipe'],
-                  timeout: 30000 // 30 秒超时
+                  timeout: 120000 // 120 秒超时
                 });
 
                 let stdout = '';
@@ -390,11 +393,8 @@ Cron 表达式格式：
                 // 备用方案：直接调用 Gateway API
                 const execFile = cp.execFile;
                 
-                // 简化命令，减少参数长度
-                const simpleEvent = `GitHub 热榜 ${sinceLower} ${channelList.join(',')}`;
-                
                 const result = await new Promise<string>((resolve, reject) => {
-                  execFile('openclaw', ['cron', 'add', '--name', jobName, '--cron', schedule!, '--system-event', simpleEvent], {
+                  execFile('openclaw', ['cron', 'add', '--name', jobName, '--cron', schedule!, '--system-event', systemEventText], {
                     timeout: 15000 as any,
                     maxBuffer: 5 * 1024 * 1024 as any
                   }, (error: any, stdout: string, stderr: string) => {
