@@ -375,15 +375,29 @@ The plugin supports OpenAI-compatible API providers. If not configured in the pl
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| `enabled` | boolean | No | `false` | Enable WeChat notifications via @tencent-weixin/openclaw-weixin plugin |
-| `receiver_id` | string | No | - | WeChat receiver ID (format: `xxx@im.wechat`) |
+| `enabled` | boolean | No | `true` | Enable WeChat notifications via @tencent-weixin/openclaw-weixin plugin |
+| `receiver_id` | string | No | Auto-detect | WeChat receiver ID (format: `xxx@im.wechat`) |
 | `bot_account_id` | string | No | - | WeChat bot account ID (format: `xxx-im-bot`) |
+
+**receiver_id Auto-Detection:**
+
+The plugin will automatically detect `receiver_id` using the following priority (no manual configuration needed in most cases):
+
+1. **Plugin Config**: `plugins.openclaw-github-trending.config.channels.wechat.receiver_id`
+2. **Environment Variable**: `OPENCLAW_WECHAT_RECEIVER_ID`
+3. **Message Context**: If current session is from WeChat, auto-reply to sender
+4. **Session History**: Extract from `~/.openclaw/agents/main/sessions/sessions.json`
+5. **OpenClaw Config**: Search WeChat plugin configuration and sessions
+
+**⚠️ Important:**
+- WeChat ID is **case-sensitive**, e.g., `o9cq806Il_QmHA022BUNXe0hUv4I@im.wechat`
+- If auto-detection fails, detailed configuration guide will be shown
 
 **WeChat Requirements:**
 
 1. **Install WeChat Plugin**:
    ```bash
-   npm install @tencent-weixin/openclaw-weixin
+   openclaw plugins install @tencent-weixin/openclaw-weixin
    ```
 
 2. **Configure in OpenClaw** (`~/.openclaw/openclaw.json`):
@@ -391,20 +405,25 @@ The plugin supports OpenAI-compatible API providers. If not configured in the pl
    {
      "plugins": {
        "entries": {
-         "@tencent-weixin/openclaw-weixin": {
-           "enabled": true,
-           "config": {
-             "enable_login": true
-           }
-         },
+         "openclaw-weixin": {
+           "enabled": true
+         }
+       }
+     }
+   }
+   ```
+
+3. **Optional: Configure receiver_id** (only if you need to push to a specific user):
+   ```json
+   {
+     "plugins": {
+       "entries": {
          "openclaw-github-trending": {
-           "enabled": true,
            "config": {
              "channels": {
                "wechat": {
                  "enabled": true,
-                 "receiver_id": "xxx@im.wechat",
-                 "bot_account_id": "xxx-im-bot"
+                 "receiver_id": "o9cq806Il_QmHA022BUNXe0hUv4I@im.wechat"
                }
              }
            }
@@ -414,38 +433,24 @@ The plugin supports OpenAI-compatible API providers. If not configured in the pl
    }
    ```
 
-3. **Configuration Options (choose one)**:
-   - **Config File (Recommended)**: Set `receiver_id` and `bot_account_id` in the `wechat` section of `openclaw.json`
-   - **Environment Variables**: Set `OPENCLAW_WECHAT_RECEIVER_ID` and `OPENCLAW_WECHAT_BOT_ACCOUNT_ID`
-   - **Default Values**: Use built-in default configuration (for testing only)
+   **💡 Tip**: If `receiver_id` is not configured, the plugin will auto-detect it from session history.
 
-4. **Login to WeChat**:
-   - OpenClaw will prompt you to scan QR code with your personal WeChat
-   - After login, messages will be sent to the configured WeChat account
+**🔍 How to Get Your WeChat ID:**
 
-5. **Usage**:
-   **⚠️ Important: WeChat notifications are only supported in OpenClaw chat context, not in CLI mode (`openclaw gen-cron` command)**
+```bash
+# Method 1: Check OpenClaw session history
+cat ~/.openclaw/agents/main/sessions/sessions.json | jq 'to_entries[] | select(.key | contains("wechat")) | {key, lastTo}'
 
-   **Use in OpenClaw Chat** (Recommended):
-   ```text
-   Use openclaw-github-trending tool to get today's trending and push to WeChat
-   or
-   Run immediately: Fetch today's trending and push to WeChat
-   ```
+# Method 2: Check message send records
+cat ~/.openclaw/agents/main/sessions/sessions.json | grep -i "o9cq.*@im.wechat"
 
-   **Create scheduled task in chat**:
-   ```bash
-   openclaw cron add --name "GitHub Trending Daily WeChat" \
-     --cron "0 18 * * *" \
-     --system-event '{"tool":"openclaw-github-trending","params":{"since":"daily","channels":["wechat"]}}'
-   ```
+# Method 3: Send a test message and check logs
+openclaw message send --channel openclaw-weixin --target "your-wechat-id" "test"
+```
 
-**Notes:**
-- WeChat notifications are sent as markdown messages to your personal WeChat account
-- Messages include new repositories (with full AI summaries) and trending repositories (with brief summaries)
-- WeChat functionality depends on the `executeTool` API provided by @tencent-weixin/openclaw-weixin plugin
-- CLI mode will return an error when using WeChat channel
-- If the WeChat plugin is not installed or configured, the plugin will show a warning but continue with other channels
+**⚠️ Notes:**
+- WeChat ID format: `o9cq806Il_QmHA022BUNXe0hUv4I@im.wechat` (case-sensitive!)
+- If auto-detection fails, error message includes detailed configuration guide
 
 *Required when using this channel
 

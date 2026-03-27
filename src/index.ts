@@ -69,6 +69,8 @@ Cron 表达式格式：
 
 提示：
   - 推送渠道需要在 ~/.openclaw/openclaw.json 中配置
+  - 微信渠道需要安装 @tencent-weixin/openclaw-weixin 插件
+  - receiver_id 可以从插件配置、环境变量或 OpenClaw 频道配置中自动获取
 `)
         .action(async (mode: string, since: string, channels: string) => {
           const cliLogger = Logger.get('CLI');
@@ -126,12 +128,43 @@ Cron 表达式格式：
             console.error(``);
             console.error(`📌 可用渠道：${validChannels.join('、')}`);
             console.error(``);
-            console.error(`💬 微信说明：`);
-            console.error(`   - 微信渠道依赖 @tencent-weixin/openclaw-weixin 插件`);
-            console.error(`   - 需要先在 OpenClaw 中配置并启用该插件`);
-            console.error(`   - 微信消息将通过该插件发送到您的个人微信`);
-            console.error(``);
             process.exit(1);
+          }
+
+          // Check WeChat plugin availability if wechat channel is requested
+          if (channelList.includes('wechat')) {
+            const { exec } = await import('child_process');
+            try {
+              const pluginCheck = await new Promise<string>((resolve, reject) => {
+                exec('openclaw plugins list', (error, stdout, stderr) => {
+                  if (error) reject(error);
+                  else resolve(stdout);
+                });
+              });
+
+              const wechatPluginInstalled = pluginCheck.includes('openclaw-weixin') || pluginCheck.includes('Weixin');
+
+              if (!wechatPluginInstalled) {
+                console.error(``);
+                console.error(`❌ 错误：微信插件未安装`);
+                console.error(``);
+                console.error(`📌 安装命令：`);
+                console.error(`   openclaw plugins install @tencent-weixin/openclaw-weixin`);
+                console.error(``);
+                console.error(`💬 说明：`);
+                console.error(`   - 微信渠道依赖 @tencent-weixin/openclaw-weixin 插件`);
+                console.error(`   - 请先安装并启用该插件，然后再使用 wechat 渠道`);
+                console.error(``);
+                process.exit(1);
+              }
+
+              console.log(`✅ 微信插件已安装，继续执行...`);
+              console.log(``);
+            } catch (error: any) {
+              console.error(`⚠️  无法检查微信插件状态：${error.message}`);
+              console.error(`   将继续执行，如果插件未安装会收到错误提示`);
+              console.error(``);
+            }
           }
 
           if (modeLower === 'now') {
@@ -529,7 +562,8 @@ Cron 表达式格式：
         // Categorize repositories into newlySeen, shouldPush, and alreadySeen
         const { newlySeen, shouldPush, alreadySeen } = historyManager.categorizeRepositories(
           repositories,
-          historyConfig
+          historyConfig,
+          since
         );
 
         safeLogger.info(`Found ${repositories.length} repos, ${shouldPush.length} to push`);
@@ -778,16 +812,6 @@ Cron 表达式格式：
                 safeLogger.error(`❌ Email send failed: ${result.error || 'Unknown error'}`);
               }
             } else if (targetChannel === 'wechat') {
-              // Check if WeChat plugin is available
-              const wechatConfig = pluginConfig?.channels?.wechat;
-              const wechatEnabled = wechatConfig?.enabled !== false; // Default to true if not specified
-
-              if (!wechatEnabled) {
-                safeLogger.warn('WeChat channel is disabled in config, skipping');
-                pushResults.push({ channel: 'wechat', success: false, error: 'WeChat plugin disabled' });
-                continue;
-              }
-
               safeLogger.info(`Sending to WeChat via openclaw-weixin plugin...`);
 
               // Build plain text content (optimized for WeChat)
@@ -815,8 +839,6 @@ Cron 表达式格式：
                 safeLogger.info(`✅ WeChat message sent successfully!`);
               } else {
                 safeLogger.warn(`⚠️ WeChat send failed: ${result.error || 'Unknown error'}`);
-                safeLogger.warn(`   This may be because the @tencent-weixin/openclaw-weixin plugin is not installed or not configured.`);
-                safeLogger.warn(`   Please ensure the WeChat plugin is installed and enabled in OpenClaw.`);
               }
             }
           } catch (error) {

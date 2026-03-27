@@ -61,7 +61,7 @@ export class HistoryManager {
   /**
    * Determine if a repository should be pushed again
    */
-  shouldPushAgain(repo: RepositoryInfo, history: RepositoryHistory, config: HistoryConfig): boolean {
+  shouldPushAgain(repo: RepositoryInfo, history: RepositoryHistory, config: HistoryConfig, since?: string): boolean {
     // Never pushed before
     if (!history.last_pushed) {
       return true;
@@ -69,7 +69,16 @@ export class HistoryManager {
 
     // Stars increased significantly
     const starGrowth = repo.stars - history.last_stars;
-    if (starGrowth >= config.star_threshold) {
+
+    // 根据榜单周期调整阈值：今日×1，本周×2，本月×5
+    let adjustedThreshold = config.star_threshold;
+    if (since === 'weekly') {
+      adjustedThreshold *= 2;
+    } else if (since === 'monthly') {
+      adjustedThreshold *= 5;
+    }
+
+    if (starGrowth >= adjustedThreshold) {
       return true;
     }
 
@@ -81,7 +90,8 @@ export class HistoryManager {
    */
   categorizeRepositories(
     repositories: RepositoryInfo[],
-    config: HistoryConfig
+    config: HistoryConfig,
+    since?: 'daily' | 'weekly' | 'monthly'
   ): {
     newlySeen: RepositoryInfo[];
     shouldPush: RepositoryInfo[];
@@ -98,7 +108,7 @@ export class HistoryManager {
         // First time seeing this repository
         newlySeen.push(repo);
         shouldPush.push(repo);
-      } else if (config.enabled && this.shouldPushAgain(repo, history, config)) {
+      } else if (config.enabled && this.shouldPushAgain(repo, history, config, since)) {
         // Seen before, but should push again (star growth)
         shouldPush.push(repo);
         alreadySeen.push(repo);

@@ -100,8 +100,8 @@ openclaw plugins install openclaw-github-trending
             },
             "wechat": {
               "enabled": true,
-              "receiver_id": "your-wechat-user-id@imwechat", // 微信用户 id                            
-              "bot_account_id": "your-bot-account-id-im-bot" // 微信机器人账号 id
+              "receiver_id": "your-wechat-user-id@im.wechat", // 可选：微信用户 ID，不配置会尝试自动获取
+              "bot_account_id": "your-bot-account-id-im-bot"  // 可选：微信机器人账号 ID
             }
           },
           // 可选：开启历史记录功能，用于智能去重
@@ -378,15 +378,29 @@ openclaw cron rm <job-id>
 
 | 字段 | 类型 | 必填 | 默认值 | 说明 |
 |-------|------|----------|---------|-------------|
-| `enabled` | boolean | 否 | `false` | 通过 @tencent-weixin/openclaw-weixin 插件启用微信通知 |
-| `receiver_id` | string | 否 | - | 微信接收者 ID（格式：`xxx@im.wechat`） |
+| `enabled` | boolean | 否 | `true` | 通过 @tencent-weixin/openclaw-weixin 插件启用微信通知 |
+| `receiver_id` | string | 否 | 自动获取 | 微信接收者 ID（格式：`xxx@im.wechat`） |
 | `bot_account_id` | string | 否 | - | 微信机器人账号 ID（格式：`xxx-im-bot`） |
+
+**receiver_id 自动获取机制：**
+
+插件会按以下优先级自动获取 `receiver_id`，**通常无需手动配置**：
+
+1. **插件配置**：`plugins.openclaw-github-trending.config.channels.wechat.receiver_id`
+2. **环境变量**：`OPENCLAW_WECHAT_RECEIVER_ID`
+3. **消息上下文**：如果当前会话来自微信，自动回复给发送者
+4. **会话历史**：从 `~/.openclaw/agents/main/sessions/sessions.json` 中提取最近使用的微信 ID
+5. **OpenClaw 配置**：从微信插件的配置和会话中查找
+
+**⚠️ 重要提示：**
+- 微信 ID **区分大小写**，例如：`o9cq806Il_QmHA022BUNXe0hUv4I@im.wechat`
+- 如果自动获取失败，会显示详细的配置指南和获取方法
 
 **微信推送配置要求：**
 
 1. **安装微信插件**：
    ```bash
-   npm install @tencent-weixin/openclaw-weixin
+   openclaw plugins install @tencent-weixin/openclaw-weixin
    ```
 
 2. **在 OpenClaw 中配置** (`~/.openclaw/openclaw.json`)：
@@ -394,9 +408,53 @@ openclaw cron rm <job-id>
    {
      "plugins": {
        "entries": {
-         "@tencent-weixin/openclaw-weixin": {
-           "enabled": true,
+         "openclaw-weixin": {
+           "enabled": true
+         }
+       }
+     }
+   }
+   ```
+
+3. **可选：配置 receiver_id**（仅在需要推送到特定用户时）：
+   ```json
+   {
+     "plugins": {
+       "entries": {
+         "openclaw-github-trending": {
            "config": {
+             "channels": {
+               "wechat": {
+                 "enabled": true,
+                 "receiver_id": "xxx@im.wechat"
+               }
+             }
+           }
+         }
+       }
+     }
+   }
+   ```
+
+   **💡 提示**：如果不配置 `receiver_id`，插件会自动从会话历史中获取。
+
+**🔍 如何获取你的微信 ID：**
+
+```bash
+# 方法 1：查看 OpenClaw 会话历史
+cat ~/.openclaw/agents/main/sessions/sessions.json | jq 'to_entries[] | select(.key | contains("wechat")) | {key, lastTo}'
+
+# 方法 2：查看消息发送记录
+cat ~/.openclaw/agents/main/sessions/sessions.json | grep -i "o9cq.*@im.wechat"
+
+# 方法 3：发送一次测试消息后查看日志
+openclaw message send --channel openclaw-weixin --target "你的微信 ID" "测试"
+```
+
+**⚠️ 注意事项：**
+- 微信 ID 格式：`o9cq806Il_QmHA022BUNXe0hUv4I@im.wechat`（区分大小写！）
+- 如果自动获取失败，错误信息会包含详细的配置指南
+
              "enable_login": true
            }
          },

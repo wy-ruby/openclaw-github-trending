@@ -209,7 +209,8 @@ async function githubTrendingHandler(
 
   const { newlySeen, shouldPush, alreadySeen } = historyManager.categorizeRepositories(
     repositories,
-    historyConfig
+    historyConfig,
+    since
   );
 
   // Split alreadySeen into two categories:
