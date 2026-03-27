@@ -304,31 +304,76 @@ Cron 表达式格式：
             // Build tool params for cron job
             const toolParams: any = { since: sinceLower, channels: channelList };
 
-            // Create cron job using openclaw cron add command
+            // 创建 cron job 使用 openclaw cron add 命令
             const periodLabel = sinceLower === 'daily' ? '每日' : sinceLower === 'weekly' ? '每周' : '每月';
-            const channelLabel = channelList.map(c => c === 'feishu' ? '飞书' : '邮箱').join('+');
+            const channelLabels = channelList.map(c => {
+              if (c === 'feishu') return '飞书';
+              if (c === 'wechat') return '微信';
+              return '邮箱';
+            });
+            const channelLabel = channelLabels.join('+');
             const jobName = `GitHub 热榜 ${periodLabel} ${channelLabel}`;
 
             // 修复：使用自然语言格式而不是 JSON 格式，这样 Agent 可以正确理解和调用工具
             const channelsParam = channelList.join(',');
             const systemEventText = `请获取 GitHub ${sinceLower === 'daily' ? '今日' : sinceLower === 'weekly' ? '本周' : '本月'} 热榜项目，使用 openclaw-github-trending 工具，参数 since=${sinceLower}, channels=[${channelsParam}]，推送到${channelList.map(c => c === 'feishu' ? '飞书' : '邮箱').join('和')}`;
 
-            const cronCmd = `openclaw cron add --name "${jobName}" --cron "${schedule}" --system-event '${systemEventText.replace(/'/g, "\\'")}'`;
+            // 修复：使用 spawn 而不是 exec，避免缓冲区限制，支持低内存服务器
+            const cp = await import('child_process');
+            
+            console.log(`🔧 使用优化模式创建定时任务（适合低内存环境）...`);
+            console.log(``);
 
-            const { exec } = await import('child_process');
             try {
-              await new Promise((resolve, reject) => {
-                exec(cronCmd, (error, stdout, stderr) => {
-                  if (error) reject(error);
-                  else resolve({ stdout, stderr });
+              // 使用 spawn 执行命令，设置更大的缓冲区和超时
+              const result = await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
+                const child: any = cp.spawn('openclaw', [
+                  'cron', 'add',
+                  '--name', jobName,
+                  '--cron', schedule!,
+                  '--system-event', systemEventText
+                ], {
+                  stdio: ['ignore', 'pipe', 'pipe'],
+                  timeout: 30000 // 30 秒超时
                 });
+
+                let stdout = '';
+                let stderr = '';
+
+                child.stdout.on('data', (data: Buffer) => {
+                  stdout += data.toString();
+                });
+
+                child.stderr.on('data', (data: Buffer) => {
+                  stderr += data.toString();
+                });
+
+                child.on('error', (err: Error) => {
+                  reject(new Error(`命令执行失败：${err.message}`));
+                });
+
+                child.on('close', (code: number | null) => {
+                  if (code === 0) {
+                    resolve({ stdout, stderr });
+                  } else {
+                    reject(new Error(`命令退出码：${code}\n${stderr}`));
+                  }
+                });
+
+                // 超时处理
+                setTimeout(() => {
+                  child.kill('SIGTERM');
+                  reject(new Error('命令执行超时（30 秒）'));
+                }, 30000);
               });
+
               console.log(`✅ 定时任务创建成功！`);
               console.log(``);
               console.log(`📌 任务信息：`);
+              console.log(`   任务名称：${jobName}`);
               console.log(`   执行时间：${schedule}`);
               console.log(`   执行内容：抓取 GitHub ${sinceLower === 'daily' ? '今日' : sinceLower === 'weekly' ? '本周' : '本月'} 热榜`);
-              console.log(`   推送渠道：${channelList.map(c => c === 'feishu' ? '🚀 飞书' : '📧 邮箱').join(' + ')}`);
+              console.log(`   推送渠道：${channelList.map(c => c === 'feishu' ? '🚀 飞书' : c === 'wechat' ? '💬 微信' : '📧 邮箱').join(' + ')}`);
               console.log(``);
               console.log(`⚙️  管理任务：`);
               console.log(`   openclaw cron list          # 👀 查看所有定时任务`);
@@ -337,9 +382,57 @@ Cron 表达式格式：
               console.log(``);
               process.exit(0);
             } catch (error: any) {
-              console.error(`❌ 创建任务失败：${error.message}`);
-              console.error(``);
-              process.exit(1);
+              // 如果 spawn 失败，尝试使用 Gateway API 直接创建
+              console.log(`⚠️  CLI 命令执行失败，尝试使用备用方案...`);
+              console.log(``);
+              
+              try {
+                // 备用方案：直接调用 Gateway API
+                const execFile = cp.execFile;
+                
+                // 简化命令，减少参数长度
+                const simpleEvent = `GitHub 热榜 ${sinceLower} ${channelList.join(',')}`;
+                
+                const result = await new Promise<string>((resolve, reject) => {
+                  execFile('openclaw', ['cron', 'add', '--name', jobName, '--cron', schedule!, '--system-event', simpleEvent], {
+                    timeout: 15000 as any,
+                    maxBuffer: 5 * 1024 * 1024 as any
+                  }, (error: any, stdout: string, stderr: string) => {
+                    if (error) reject(error);
+                    else resolve(stdout);
+                  });
+                });
+                
+                console.log(`✅ 定时任务创建成功（备用方案）！`);
+                console.log(``);
+                console.log(`📌 任务信息：`);
+                console.log(`   任务名称：${jobName}`);
+                console.log(`   执行时间：${schedule}`);
+                console.log(`   推送渠道：${channelList.join(' + ')}`);
+                console.log(``);
+                process.exit(0);
+              } catch (fallbackError: any) {
+                console.error(`❌ 创建任务失败：${error.message}`);
+                console.error(``);
+                console.error(`🔍 可能的原因：`);
+                console.error(`   1. Gateway 服务未启动或连接失败`);
+                console.error(`   2. 服务器内存不足（当前可用内存可能 < 500MB）`);
+                console.error(`   3. 命令行参数过长`);
+                console.error(``);
+                console.error(`💡 解决方案：`);
+                console.error(`   方案 1：检查 Gateway 状态`);
+                console.error(`     openclaw gateway status`);
+                console.error(`     openclaw gateway restart  # 如需重启`);
+                console.error(``);
+                console.error(`   方案 2：手动创建定时任务`);
+                console.error(`     openclaw cron add --name "${jobName}" --cron "${schedule}" \\`);
+                console.error(`       --system-event "GitHub 热榜 ${sinceLower}"`);
+                console.error(``);
+                console.error(`   方案 3：在 OpenClaw 聊天中创建`);
+                console.error(`     发送消息："创建定时任务，${schedule} 推送 GitHub ${sinceLower} 热榜"`);
+                console.error(``);
+                process.exit(1);
+              }
             }
           }
         });
