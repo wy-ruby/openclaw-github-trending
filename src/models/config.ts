@@ -44,7 +44,6 @@ export interface EmailConfig {
 export interface WeChatConfig {
   enabled?: boolean; // Plugin enabled status (controlled by OpenClaw plugin system)
   receiver_id?: string; // WeChat user ID to receive messages
-  bot_account_id?: string; // WeChat bot account ID
   channel_name?: string; // OpenClaw channel name, defaults to 'openclaw-weixin'
 }
 

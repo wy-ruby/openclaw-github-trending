@@ -377,7 +377,6 @@ The plugin supports OpenAI-compatible API providers. If not configured in the pl
 |-------|------|----------|---------|-------------|
 | `enabled` | boolean | No | `true` | Enable WeChat notifications via @tencent-weixin/openclaw-weixin plugin |
 | `receiver_id` | string | No | Auto-detect | WeChat receiver ID (format: `xxx@im.wechat`) |
-| `bot_account_id` | string | No | - | WeChat bot account ID (format: `xxx-im-bot`) |
 
 **receiver_id Auto-Detection:**
 
@@ -390,7 +389,7 @@ The plugin will automatically detect `receiver_id` using the following priority 
 5. **OpenClaw Config**: Search WeChat plugin configuration and sessions
 
 **⚠️ Important:**
-- WeChat ID is **case-sensitive**, e.g., `o9cq806Il_QmHA022BUNXe0hUv4I@im.wechat`
+- WeChat ID is **case-sensitive**, e.g., `xxx@im.wechat`
 - If auto-detection fails, detailed configuration guide will be shown
 
 **WeChat Requirements:**
@@ -423,7 +422,7 @@ The plugin will automatically detect `receiver_id` using the following priority 
              "channels": {
                "wechat": {
                  "enabled": true,
-                 "receiver_id": "o9cq806Il_QmHA022BUNXe0hUv4I@im.wechat"
+                 "receiver_id": "xxx@im.wechat"
                }
              }
            }
@@ -449,7 +448,7 @@ openclaw message send --channel openclaw-weixin --target "your-wechat-id" "test"
 ```
 
 **⚠️ Notes:**
-- WeChat ID format: `o9cq806Il_QmHA022BUNXe0hUv4I@im.wechat` (case-sensitive!)
+- WeChat ID format: `xxx@im.wechat` (case-sensitive!)
 - If auto-detection fails, error message includes detailed configuration guide
 
 *Required when using this channel

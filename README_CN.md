@@ -100,8 +100,7 @@ openclaw plugins install openclaw-github-trending
             },
             "wechat": {
               "enabled": true,
-              "receiver_id": "your-wechat-user-id@im.wechat", // 可选：微信用户 ID，不配置会尝试自动获取
-              "bot_account_id": "your-bot-account-id-im-bot"  // 可选：微信机器人账号 ID
+              "receiver_id": "your-wechat-user-id@im.wechat" // 可选：微信用户 ID，不配置会尝试自动获取
             }
           },
           // 可选：开启历史记录功能，用于智能去重
@@ -380,7 +379,6 @@ openclaw cron rm <job-id>
 |-------|------|----------|---------|-------------|
 | `enabled` | boolean | 否 | `true` | 通过 @tencent-weixin/openclaw-weixin 插件启用微信通知 |
 | `receiver_id` | string | 否 | 自动获取 | 微信接收者 ID（格式：`xxx@im.wechat`） |
-| `bot_account_id` | string | 否 | - | 微信机器人账号 ID（格式：`xxx-im-bot`） |
 
 **receiver_id 自动获取机制：**
 
@@ -393,7 +391,7 @@ openclaw cron rm <job-id>
 5. **OpenClaw 配置**：从微信插件的配置和会话中查找
 
 **⚠️ 重要提示：**
-- 微信 ID **区分大小写**，例如：`o9cq806Il_QmHA022BUNXe0hUv4I@im.wechat`
+- 微信 ID **区分大小写**，例如：`xxx@im.wechat`
 - 如果自动获取失败，会显示详细的配置指南和获取方法
 
 **微信推送配置要求：**
@@ -452,7 +450,7 @@ openclaw message send --channel openclaw-weixin --target "你的微信 ID" "测�
 ```
 
 **⚠️ 注意事项：**
-- 微信 ID 格式：`o9cq806Il_QmHA022BUNXe0hUv4I@im.wechat`（区分大小写！）
+- 微信 ID 格式：`xxx@im.wechat`（区分大小写！）
 - 如果自动获取失败，错误信息会包含详细的配置指南
 
              "enable_login": true
@@ -464,8 +462,7 @@ openclaw message send --channel openclaw-weixin --target "你的微信 ID" "测�
              "channels": {
                "wechat": {
                  "enabled": true,
-                 "receiver_id": "xxx@im.wechat",
-                 "bot_account_id": "xxx-im-bot"
+                 "receiver_id": "xxx@im.wechat"
                }
              }
            }
@@ -476,8 +473,8 @@ openclaw message send --channel openclaw-weixin --target "你的微信 ID" "测�
    ```
 
 3. **配置方式（三选一）**：
-   - **配置文件（推荐）**：在 `openclaw.json` 的 `wechat` 配置中设置 `receiver_id` 和 `bot_account_id`
-   - **环境变量**：设置 `OPENCLAW_WECHAT_RECEIVER_ID` 和 `OPENCLAW_WECHAT_BOT_ACCOUNT_ID`
+   - **配置文件（推荐）**：在 `openclaw.json` 的 `wechat` 配置中设置 `receiver_id`
+   - **环境变量**：设置 `OPENCLAW_WECHAT_RECEIVER_ID`
    - **默认值**：使用内置默认配置（仅用于测试）
 
 4. **登录微信**：

@@ -10,7 +10,6 @@ const logger = Logger.get('WeChatChannel');
 export interface WeChatConfig {
   enabled?: boolean;
   receiver_id?: string;
-  bot_account_id?: string;
   channel_name?: string;
 }
 
@@ -218,14 +217,12 @@ export class WeChatChannel {
       };
     }
 
-    const botAccountId = config.bot_account_id || process.env.OPENCLAW_WECHAT_BOT_ACCOUNT_ID;
-
     logger.info('Sending WeChat message', {
       receiverId: receiverId ? `${receiverId.substring(0, 4)}****` : 'not set',
       contentLength: content.length
     });
 
-    const result = await this.sendViaCli(content, receiverId, botAccountId, channelName);
+    const result = await this.sendViaCli(content, receiverId, channelName);
 
     const duration = Date.now() - startTime;
     if (result.success) {
@@ -389,7 +386,6 @@ export class WeChatChannel {
   private static async sendViaCli(
     content: string,
     to: string,
-    accountId: string | undefined,
     channelName: string
   ): Promise<PushResult> {
     try {

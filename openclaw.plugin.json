@@ -1,7 +1,7 @@
 {
   "id": "openclaw-github-trending",
   "name": "GitHub Trending",
-  "version": "1.4.3",
+  "version": "1.4.4",
   "description": "Fetch GitHub trending repositories and push to Feishu or Email with AI summaries",
   "author": "王允",
   "license": "MIT",
@@ -125,10 +125,6 @@
               "receiver_id": {
                 "type": "string",
                 "description": "WeChat user ID to receive messages"
-              },
-              "bot_account_id": {
-                "type": "string",
-                "description": "WeChat bot account ID"
               },
               "channel_name": {
                 "type": "string",
