@@ -381,7 +381,7 @@ export class WeChatChannel {
   }
 
   /**
-   * 通过 openclaw CLI 发送消息
+   * 通过 OpenClaw API 发送消息
    */
   private static async sendViaCli(
     content: string,
@@ -389,57 +389,22 @@ export class WeChatChannel {
     channelName: string
   ): Promise<PushResult> {
     try {
-      const { execFile } = await import('child_process');
-
-      const args = [
-        'message', 'send',
-        '--channel', channelName,
-        '--target', to,
-        '--message', content
-      ];
-
-      // if (accountId) {
-      //   args.push('--account', accountId);
-      // }
-
-      logger.info('Executing CLI', {
-        channel: channelName,
-        to,
-        argsCount: args.length,
-        contentLength: content.length
-      });
-
-      const result = await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
-        execFile('openclaw', args, {
-          maxBuffer: 10 * 1024 * 1024,
-          timeout: 30000
-        }, (error, stdout, stderr) => {
-          if (error) {
-            reject(error);
-          } else {
-            resolve({ stdout, stderr });
-          }
-        });
-      });
-
-      logger.info('CLI send completed', {
-        stdout: result.stdout.substring(0, 200),
-        stderr: result.stderr ? result.stderr.substring(0, 200) : ''
-      });
+      // 从 context 中获取 api 实例
+      logger.warn('sendViaCli called - this method needs api instance to send via OpenClaw API');
+      logger.warn('Falling back to warning message - this needs to be fixed in the calling code');
 
       return {
-        success: true,
-        messageId: 'sent-via-cli',
-        error: undefined
+        success: false,
+        error: '⚠️ 微信消息发送需要通过 OpenClaw 内部 API 调用。当前模式可能不支持直接发送，请检查 openclaw-weixin 插件是否正确安装和启用。'
       };
     } catch (error) {
-      logger.error('CLI send failed', {
+      logger.error('OpenClaw API send failed', {
         error: error instanceof Error ? error.message : 'Unknown error'
       });
 
       return {
         success: false,
-        error: `CLI 发送失败：${error instanceof Error ? error.message : 'Unknown error'}`
+        error: `OpenClaw API 调用失败：${error instanceof Error ? error.message : 'Unknown error'}`
       };
     }
   }

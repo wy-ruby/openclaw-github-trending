@@ -131,40 +131,43 @@ Cron 表达式格式：
             process.exit(1);
           }
 
-          // Check WeChat plugin availability if wechat channel is requested
+          // Check WeChat plugin availability via config file (no child_process)
           if (channelList.includes('wechat')) {
-            const { exec } = await import('child_process');
+            const fs = await import('fs');
+            const path = await import('path');
+            const os = await import('os');
+
+            const configPath = path.join(os.homedir(), '.openclaw', 'openclaw.json');
+            let wechatPluginInstalled = false;
+
             try {
-              const pluginCheck = await new Promise<string>((resolve, reject) => {
-                exec('openclaw plugins list', (error, stdout, stderr) => {
-                  if (error) reject(error);
-                  else resolve(stdout);
-                });
-              });
-
-              const wechatPluginInstalled = pluginCheck.includes('openclaw-weixin') || pluginCheck.includes('Weixin');
-
-              if (!wechatPluginInstalled) {
-                console.error(``);
-                console.error(`❌ 错误：微信插件未安装`);
-                console.error(``);
-                console.error(`📌 安装命令：`);
-                console.error(`   openclaw plugins install @tencent-weixin/openclaw-weixin`);
-                console.error(``);
-                console.error(`💬 说明：`);
-                console.error(`   - 微信渠道依赖 @tencent-weixin/openclaw-weixin 插件`);
-                console.error(`   - 请先安装并启用该插件，然后再使用 wechat 渠道`);
-                console.error(``);
-                process.exit(1);
-              }
-
-              console.log(`✅ 微信插件已安装，继续执行...`);
-              console.log(``);
-            } catch (error: any) {
-              console.error(`⚠️  无法检查微信插件状态：${error.message}`);
-              console.error(`   将继续执行，如果插件未安装会收到错误提示`);
-              console.error(``);
+              const configRaw = fs.readFileSync(configPath, 'utf-8');
+              const config = JSON.parse(configRaw);
+              const entries = config?.plugins?.entries || {};
+              wechatPluginInstalled = !!(
+                entries['openclaw-weixin'] ||
+                entries['@tencent-weixin/openclaw-weixin']
+              );
+            } catch {
+              // Config file not found or parse error, will let execution fail naturally
             }
+
+            if (!wechatPluginInstalled) {
+              console.error(``);
+              console.error(`❌ 错误：微信插件未安装`);
+              console.error(``);
+              console.error(`📌 安装命令：`);
+              console.error(`   openclaw plugins install @tencent-weixin/openclaw-weixin`);
+              console.error(``);
+              console.error(`💬 说明：`);
+              console.error(`   - 微信渠道依赖 @tencent-weixin/openclaw-weixin 插件`);
+              console.error(`   - 请先安装并启用该插件，然后再使用 wechat 渠道`);
+              console.error(``);
+              process.exit(1);
+            }
+
+            console.log(`✅ 微信插件已安装，继续执行...`);
+            console.log(``);
           }
 
           if (modeLower === 'now') {
@@ -321,119 +324,30 @@ Cron 表达式格式：
             // 简洁格式：使用 openclaw-github-trending 工具，获取本月热榜，推送到飞书，邮箱
             const systemEventText = `使用 openclaw-github-trending 工具，获取${sinceText}热榜，推送到${channelText}`;
 
-            // 修复：使用 spawn 而不是 exec，避免缓冲区限制，支持低内存服务器
-            const cp = await import('child_process');
-            
-            console.log(`🔧 使用优化模式创建定时任务（适合低内存环境）...`);
+            // 使用 OpenClaw API 创建 cron job
+            console.log(`🔧 正在创建定时任务...`);
             console.log(``);
 
-            try {
-              // 使用 spawn 执行命令，设置更大的缓冲区和超时
-              const result = await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
-                const child: any = cp.spawn('openclaw', [
-                  'cron', 'add',
-                  '--name', jobName,
-                  '--cron', schedule!,
-                  '--system-event', systemEventText
-                ], {
-                  stdio: ['ignore', 'pipe', 'pipe'],
-                  timeout: 120000 // 120 秒超时
-                });
-
-                let stdout = '';
-                let stderr = '';
-
-                child.stdout.on('data', (data: Buffer) => {
-                  stdout += data.toString();
-                });
-
-                child.stderr.on('data', (data: Buffer) => {
-                  stderr += data.toString();
-                });
-
-                child.on('error', (err: Error) => {
-                  reject(new Error(`命令执行失败：${err.message}`));
-                });
-
-                child.on('close', (code: number | null) => {
-                  if (code === 0) {
-                    resolve({ stdout, stderr });
-                  } else {
-                    reject(new Error(`命令退出码：${code}\n${stderr}`));
-                  }
-                });
-
-                // 超时处理
-                setTimeout(() => {
-                  child.kill('SIGTERM');
-                  reject(new Error('命令执行超时（30 秒）'));
-                }, 30000);
-              });
-
-              console.log(`✅ 定时任务创建成功！`);
-              console.log(``);
-              console.log(`📌 任务信息：`);
-              console.log(`   任务名称：${jobName}`);
-              console.log(`   执行时间：${schedule}`);
-              console.log(`   执行内容：抓取 GitHub ${sinceLower === 'daily' ? '今日' : sinceLower === 'weekly' ? '本周' : '本月'} 热榜`);
-              console.log(`   推送渠道：${channelList.map(c => c === 'feishu' ? '🚀 飞书' : c === 'wechat' ? '💬 微信' : '📧 邮箱').join(' + ')}`);
-              console.log(``);
-              console.log(`⚙️  管理任务：`);
-              console.log(`   openclaw cron list          # 👀 查看所有定时任务`);
-              console.log(`   openclaw cron run <id>      # ▶️  立即手动执行任务`);
-              console.log(`   openclaw cron remove <id>   # 🗑️  删除任务`);
-              console.log(``);
-              process.exit(0);
-            } catch (error: any) {
-              // 如果 spawn 失败，尝试使用 Gateway API 直接创建
-              console.log(`⚠️  CLI 命令执行失败，尝试使用备用方案...`);
-              console.log(``);
-              
-              try {
-                // 备用方案：直接调用 Gateway API
-                const execFile = cp.execFile;
-                
-                const result = await new Promise<string>((resolve, reject) => {
-                  execFile('openclaw', ['cron', 'add', '--name', jobName, '--cron', schedule!, '--system-event', systemEventText], {
-                    timeout: 15000 as any,
-                    maxBuffer: 5 * 1024 * 1024 as any
-                  }, (error: any, stdout: string, stderr: string) => {
-                    if (error) reject(error);
-                    else resolve(stdout);
-                  });
-                });
-                
-                console.log(`✅ 定时任务创建成功（备用方案）！`);
-                console.log(``);
-                console.log(`📌 任务信息：`);
-                console.log(`   任务名称：${jobName}`);
-                console.log(`   执行时间：${schedule}`);
-                console.log(`   推送渠道：${channelList.join(' + ')}`);
-                console.log(``);
-                process.exit(0);
-              } catch (fallbackError: any) {
-                console.error(`❌ 创建任务失败：${error.message}`);
-                console.error(``);
-                console.error(`🔍 可能的原因：`);
-                console.error(`   1. Gateway 服务未启动或连接失败`);
-                console.error(`   2. 服务器内存不足（当前可用内存可能 < 500MB）`);
-                console.error(`   3. 命令行参数过长`);
-                console.error(``);
-                console.error(`💡 解决方案：`);
-                console.error(`   方案 1：检查 Gateway 状态`);
-                console.error(`     openclaw gateway status`);
-                console.error(`     openclaw gateway restart  # 如需重启`);
-                console.error(``);
-                console.error(`   方案 2：手动创建定时任务`);
-                console.error(`     openclaw cron add --name "${jobName}" --cron "${schedule}" \\`);
-                console.error(`       --system-event "GitHub 热榜 ${sinceLower}"`);
-                console.error(``);
-                console.error(`   方案 3：在 OpenClaw 聊天中创建`);
-                console.error(`     发送消息："创建定时任务，${schedule} 推送 GitHub ${sinceLower} 热榜"`);
-                console.error(``);
-                process.exit(1);
-              }
-            }
+            // 由于 OpenClaw 新版本不支持插件直接调用 child_process 执行 CLI 命令，
+            // 我们改为提供使用说明，让用户手动执行
+            console.log(`📌 请手动运行以下命令创建定时任务：`);
+            console.log(``);
+            console.log(`   openclaw cron add --name "${jobName}" \\`);
+            console.log(`     --cron "${schedule}" \\`);
+            console.log(`     --system-event "${systemEventText}"`);
+            console.log(``);
+            console.log(`💡 提示：该命令将创建一个定时任务，定期调用 openclaw-github-trending 工具`);
+            console.log(`   获取 ${sinceLower === 'daily' ? '每日' : sinceLower === 'weekly' ? '每周' : '每月'} GitHub 热榜`);
+            console.log(`   并推送到 ${channelList.join(' + ')}`);
+            console.log(``);
+            console.log(`⚙️  管理任务：`);
+            console.log(`   openclaw cron list          # 👀 查看所有定时任务`);
+            console.log(`   openclaw cron run <id>      # ▶️  立即手动执行任务`);
+            console.log(`   openclaw cron remove <id>   # 🗑️  删除任务`);
+            console.log(``);
+            console.log(`✅ 请复制上述命令并执行以创建定时任务`);
+            console.log(``);
+            process.exit(0);
           }
         });
     },
